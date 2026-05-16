@@ -1,0 +1,1754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>Budget</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
+  --text:#e8eaf0;--muted:#7c8299;--accent:#6c63ff;--accent2:#00d4aa;
+  --red:#ff5c6b;--amber:#ffb84d;--green:#4ade80;--blue:#38bdf8;
+  --radius:14px;--radius-sm:8px;--nav-h:64px;--safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:16px;overscroll-behavior:none}
+#root{height:100%;display:flex;flex-direction:column}
+.app-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;max-width:600px;margin:0 auto;width:100%}
+.main-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 16px calc(var(--nav-h) + var(--safe-b) + 24px);-webkit-overflow-scrolling:touch}
+/* Bottom Nav */
+.bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:600px;height:calc(var(--nav-h) + var(--safe-b));background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-around;padding-top:6px;padding-bottom:var(--safe-b);z-index:100}
+.bnav-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 12px;border:none;background:none;color:var(--muted);cursor:pointer;font-size:10px;font-weight:500;transition:color .15s;min-width:52px}
+.bnav-item.active{color:var(--accent)}
+.bnav-item svg{width:22px;height:22px}
+.bnav-fab{position:fixed;bottom:calc(var(--nav-h) + var(--safe-b) + 12px);right:max(16px,calc(50% - 284px));width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(108,99,255,.5);z-index:101;transition:transform .15s}
+.bnav-fab:active{transform:scale(.93)}
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.card-sm{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px}
+.section-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:20px 0 8px}
+/* Metric cards */
+.mcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;flex-direction:column;gap:4px}
+.mcard-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.mcard-val{font-size:22px;font-weight:800}
+.mcard-sub{font-size:12px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+/* Status banner */
+.sbanner{border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px;font-weight:600}
+.sbanner.green{background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.3);color:var(--green)}
+.sbanner.amber{background:rgba(255,184,77,.12);border:1px solid rgba(255,184,77,.3);color:var(--amber)}
+.sbanner.red{background:rgba(255,92,107,.12);border:1px solid rgba(255,92,107,.3);color:var(--red)}
+.sbanner.blue{background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.3);color:var(--blue)}
+.sbanner svg{flex-shrink:0;width:20px;height:20px}
+/* Auth */
+.auth-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--bg)}
+.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:32px 28px;width:100%;max-width:400px}
+.auth-title{font-size:24px;font-weight:800;margin-bottom:4px}
+.auth-sub{color:var(--muted);font-size:14px;margin-bottom:28px}
+/* Forms */
+.field{margin-bottom:16px}
+.field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--muted)}
+.field input,.field select,.field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;color:var(--text);font-size:16px;font-family:inherit;outline:none;transition:border-color .15s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+.field textarea{resize:vertical;min-height:72px}
+.field select option{background:var(--surface)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 20px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-size:15px;font-weight:600;font-family:inherit;transition:opacity .15s,transform .1s;width:100%}
+.btn:active{transform:scale(.98)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-danger{background:rgba(255,92,107,.15);color:var(--red);border:1px solid rgba(255,92,107,.3)}
+.btn-ghost{background:none;color:var(--muted);border:1px solid var(--border)}
+.btn-sm{padding:8px 14px;font-size:13px;width:auto}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.auth-toggle{text-align:center;margin-top:20px;font-size:14px;color:var(--muted)}
+.auth-toggle button{background:none;border:none;color:var(--accent);font-weight:600;cursor:pointer;font-size:14px}
+/* Bill row */
+.bill-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+.bill-row:last-child{border-bottom:none}
+.bill-info{display:flex;flex-direction:column;gap:2px}
+.bill-name{font-weight:600;font-size:15px}
+.bill-due{font-size:12px;color:var(--muted)}
+.bill-amt{font-weight:700;font-size:16px}
+.bill-soon{color:var(--amber)}
+.bill-overdue{color:var(--red)}
+/* Income type badges */
+.inc-type{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.inc-paycheck{background:rgba(108,99,255,.2);color:var(--accent)}
+.inc-bonus{background:rgba(0,212,170,.2);color:var(--accent2)}
+.inc-other{background:rgba(255,184,77,.2);color:var(--amber)}
+/* Claim banner */
+.claim-banner{background:rgba(108,99,255,.12);border:1px solid rgba(108,99,255,.3);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:flex;flex-direction:column;gap:10px}
+.claim-banner p{font-size:14px;color:var(--text)}
+.claim-banner .claim-actions{display:flex;gap:8px}
+/* Toast */
+.toast-wrap{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:999;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:calc(100% - 32px);max-width:400px}
+.toast{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;font-size:14px;font-weight:500;box-shadow:0 4px 24px rgba(0,0,0,.4);animation:slideIn .2s ease;pointer-events:all}
+.toast.success{border-color:rgba(74,222,128,.4);color:var(--green)}
+.toast.error{border-color:rgba(255,92,107,.4);color:var(--red)}
+.toast.info{border-color:rgba(56,189,248,.4);color:var(--blue)}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:flex-end;justify-content:center}
+.modal-sheet{background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;padding:20px 20px calc(20px + var(--safe-b));animation:slideUp .25s ease}
+.modal-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px}
+.modal-title{font-size:18px;font-weight:700;margin-bottom:20px}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+/* Tabs within a page */
+.tab-pills{display:flex;gap:6px;margin-bottom:16px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.tab-pills::-webkit-scrollbar{display:none}
+.tab-pill{padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s}
+.tab-pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+/* Progress bar */
+.prog-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin:6px 0}
+.prog-fill{height:100%;border-radius:3px;transition:width .4s ease}
+/* Row items */
+.row-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}
+.row-item:last-child{border-bottom:none}
+.row-left{display:flex;flex-direction:column;gap:2px}
+.row-right{display:flex;align-items:center;gap:8px}
+/* Donut */
+.donut-wrap{position:relative;display:flex;align-items:center;justify-content:center}
+.donut-center{position:absolute;text-align:center}
+/* Setup */
+.setup-wrap{flex:1;padding:24px;overflow-y:auto}
+.setup-step{max-width:400px;margin:0 auto}
+.setup-title{font-size:26px;font-weight:800;margin-bottom:8px}
+.setup-sub{color:var(--muted);font-size:15px;margin-bottom:28px;line-height:1.6}
+/* Empty state */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center;gap:12px}
+.empty-icon{font-size:48px}
+.empty h3{font-size:18px;font-weight:700}
+.empty p{color:var(--muted);font-size:14px;line-height:1.6}
+/* Chip */
+.chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;background:var(--surface2);border:1px solid var(--border);color:var(--text)}
+/* Scroll fix for desktop */
+@media(min-width:600px){.bnav,.bnav-fab{left:50%;transform:translateX(-50%)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useRef,useCallback,useMemo}=React;
+
+/* ── Supabase ── */
+const SURL='https://whlfnlqzfakkbjmkpfwj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndobGZubHF6ZmFra2JqbWtwZndqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NTM2MzYsImV4cCI6MjA5NDEyOTYzNn0.DeNchaLR4RTQsVQzC_XB1PgH86AZ9MtB5yz1HV92EhM';
+const{createClient}=window.supabase;
+const db=createClient(SURL,SKEY);
+
+/* ── Defaults (all de-personalized) ── */
+const DEF_CATS=[
+  {name:'Housing',color:'#6c63ff',icon:'🏠'},
+  {name:'Food & Dining',color:'#ff7675',icon:'🍔'},
+  {name:'Groceries',color:'#fdcb6e',icon:'🛒'},
+  {name:'Transportation',color:'#00b894',icon:'🚗'},
+  {name:'Utilities',color:'#0984e3',icon:'💡'},
+  {name:'Healthcare',color:'#e17055',icon:'🏥'},
+  {name:'Entertainment',color:'#a29bfe',icon:'🎮'},
+  {name:'Shopping',color:'#fd79a8',icon:'🛍️'},
+  {name:'Personal Care',color:'#55efc4',icon:'💆'},
+  {name:'Savings',color:'#00cec9',icon:'🐖'},
+  {name:'Other',color:'#636e72',icon:'📦'},
+];
+const DEF_QL=[
+  {id:'q1',label:'Groceries',amount:0,category:'Groceries',account:'Checking'},
+  {id:'q2',label:'Gas',amount:0,category:'Transportation',account:'Checking'},
+  {id:'q3',label:'Dining',amount:0,category:'Food & Dining',account:'Checking'},
+  {id:'q4',label:'Coffee',amount:0,category:'Food & Dining',account:'Checking'},
+];
+const DEF_ACCTS=['Checking','Savings','Credit Card','Cash'];
+const DEF_FREQ='semimonthly'; // semimonthly | biweekly | weekly | monthly
+
+/* ── Helpers ── */
+const fmt=n=>n==null?'$0':'$'+Math.abs(Number(n)).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmtDec=n=>n==null?'$0.00':'$'+Math.abs(Number(n)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const today=()=>new Date().toISOString().slice(0,10);
+const addDays=(d,n)=>{const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt.toISOString().slice(0,10)};
+const monthLabel=d=>new Date(d+'T12:00').toLocaleDateString('en-US',{month:'short',year:'2-digit'});
+const dayLabel=d=>new Date(d+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+
+function nextDueDate(dayOfMonth){
+  const now=new Date();
+  const y=now.getFullYear(),m=now.getMonth();
+  let d=new Date(y,m,dayOfMonth);
+  if(d<=now) d=new Date(y,m+1,dayOfMonth);
+  return d;
+}
+function daysUntil(date){
+  const diff=new Date(date)-new Date();
+  return Math.ceil(diff/(1000*60*60*24));
+}
+
+function calcPayoffTimeline(debts){
+  if(!debts||!debts.length) return [];
+  const active=debts.filter(d=>d.current_balance>0&&d.monthly_payment>0)
+    .map(d=>({...d,bal:parseFloat(d.current_balance),pmt:parseFloat(d.monthly_payment),rate:parseFloat(d.interest_rate||0)/100/12}))
+    .sort((a,b)=>a.bal-b.bal); // snowball by default
+  const events=[];
+  let extra=0;
+  const now=new Date();
+  active.forEach(debt=>{
+    let bal=debt.bal;
+    const pmt=debt.pmt+extra;
+    let months=0;
+    while(bal>0&&months<360){
+      const interest=bal*debt.rate;
+      bal=bal+interest-pmt;
+      months++;
+    }
+    const dt=new Date(now);
+    dt.setMonth(dt.getMonth()+months);
+    const freed=debt.pmt;
+    events.push({
+      date:dt.toISOString().slice(0,10),
+      event:`${debt.name} paid off`,
+      sub:`Frees up ${fmt(freed)}/mo`,
+      color:debt.color||'#6c63ff',
+      freed,
+    });
+    extra+=freed;
+  });
+  return events;
+}
+
+/* ── Data Layer ── */
+const D={
+  async getAll(uid){
+    const q=t=>db.from(t).select('*').or(`user_id.eq.${uid},user_id.is.null`);
+    const qOwn=t=>db.from(t).select('*').eq('user_id',uid);
+    const [txR,catR,fiR,qlR,debtR,acctR,setR,budR,incR,goalR]=await Promise.all([
+      q('transactions'),q('categories'),q('fixed_items'),q('quick_log_items'),
+      q('debts'),q('accounts'),q('settings'),q('budget_targets'),
+      qOwn('income_events'),qOwn('savings_goals'),
+    ]);
+    return{
+      transactions:txR.data||[],categories:catR.data||[],
+      fixed_items:fiR.data||[],quick_log_items:qlR.data||[],
+      debts:debtR.data||[],accounts:acctR.data||[],
+      settings:setR.data||[],budget_targets:budR.data||[],
+      income_events:incR.data||[],savings_goals:goalR.data||[],
+    };
+  },
+  async hasLegacyData(){
+    const{data}=await db.from('transactions').select('id').is('user_id',null).limit(1);
+    return data&&data.length>0;
+  },
+  async claimLegacyData(uid){
+    const tables=['transactions','categories','fixed_items','quick_log_items','debts','accounts','settings','budget_targets'];
+    for(const t of tables){
+      await db.from(t).update({user_id:uid}).is('user_id',null);
+    }
+  },
+  async needsSetup(uid){
+    const{data}=await db.from('categories').select('id').eq('user_id',uid).limit(1);
+    return !data||data.length===0;
+  },
+  async fullSetup(uid){
+    // categories
+    const cats=DEF_CATS.map(c=>({...c,user_id:uid}));
+    await db.from('categories').insert(cats);
+    // quick log
+    const ql=DEF_QL.map(q=>({name:q.label,category:q.category,default_amount:q.amount||null,account:q.account,user_id:uid}));
+    await db.from('quick_log_items').insert(ql);
+    // accounts
+    for(const name of DEF_ACCTS){
+      await db.from('accounts').insert({id:crypto.randomUUID(),name,balance:0,type:'checking',user_id:uid});
+    }
+    // settings
+    await D.setSetting('pay_frequency',DEF_FREQ,uid);
+    await D.setSetting('pay_per_check','0',uid);
+  },
+  async getSetting(key,uid,all){
+    const rows=all||(await db.from('settings').select('*').or(`user_id.eq.${uid},user_id.is.null`)).data||[];
+    const r=rows.find(r=>r.key===key||r.id===key);
+    return r?r.value:null;
+  },
+  async setSetting(key,value,uid){
+    await db.from('settings').delete().eq('id',key).eq('user_id',uid);
+    await db.from('settings').insert({id:key,key,value,user_id:uid});
+  },
+  async setBudget(cat,amt,uid){
+    await db.from('budget_targets').delete().eq('id',cat).eq('user_id',uid);
+    await db.from('budget_targets').insert({id:cat,category:cat,amount:amt,user_id:uid});
+  },
+  async addTx(t,uid){
+    const{data,error}=await db.from('transactions').insert({...t,user_id:uid}).select().single();
+    return{data,error};
+  },
+  async updateTx(id,changes){
+    return db.from('transactions').update(changes).eq('id',id);
+  },
+  async deleteTx(id){
+    return db.from('transactions').delete().eq('id',id);
+  },
+  async addDebt(d,uid){
+    return db.from('debts').insert({...d,user_id:uid});
+  },
+  async updateDebt(id,changes){
+    return db.from('debts').update(changes).eq('id',id);
+  },
+  async deleteDebt(id){
+    return db.from('debts').delete().eq('id',id);
+  },
+  async addFixedItem(f,uid){
+    return db.from('fixed_items').insert({...f,user_id:uid});
+  },
+  async updateFixedItem(id,changes){
+    return db.from('fixed_items').update(changes).eq('id',id);
+  },
+  async deleteFixedItem(id){
+    return db.from('fixed_items').delete().eq('id',id);
+  },
+  async addIncomeEvent(ev,uid){
+    return db.from('income_events').insert({...ev,user_id:uid});
+  },
+  async upsertGoal(g,uid){
+    if(g.id){
+      return db.from('savings_goals').update({...g,user_id:uid}).eq('id',g.id);
+    }else{
+      return db.from('savings_goals').insert({...g,id:crypto.randomUUID(),user_id:uid});
+    }
+  },
+  async deleteGoal(id){
+    return db.from('savings_goals').delete().eq('id',id);
+  },
+  async updateAccount(id,changes){
+    return db.from('accounts').update(changes).eq('id',id);
+  },
+  async addAccount(a,uid){
+    return db.from('accounts').insert({...a,id:crypto.randomUUID(),user_id:uid});
+  },
+  async exportData(uid){
+    const d=await D.getAll(uid);
+    return{exported_at:new Date().toISOString(),version:2,...d};
+  },
+  async importData(json,uid){
+    // Wipe existing user data first
+    const tables=['transactions','categories','fixed_items','quick_log_items','debts','accounts','settings','budget_targets','income_events','savings_goals'];
+    for(const t of tables) await db.from(t).delete().eq('user_id',uid);
+    // Re-insert with new uid
+    const strip=rows=>(rows||[]).map(r=>{const{id,...rest}=r;return{...rest,user_id:uid}});
+    const stripKeepId=rows=>(rows||[]).map(r=>({...r,user_id:uid}));
+    if(json.categories?.length) await db.from('categories').insert(strip(json.categories));
+    if(json.accounts?.length) await db.from('accounts').insert(stripKeepId(json.accounts));
+    if(json.settings?.length) await db.from('settings').insert(stripKeepId(json.settings));
+    if(json.budget_targets?.length) await db.from('budget_targets').insert(stripKeepId(json.budget_targets));
+    if(json.quick_log_items?.length) await db.from('quick_log_items').insert(strip(json.quick_log_items));
+    if(json.fixed_items?.length) await db.from('fixed_items').insert(strip(json.fixed_items));
+    if(json.debts?.length) await db.from('debts').insert(strip(json.debts));
+    if(json.transactions?.length) await db.from('transactions').insert(strip(json.transactions));
+    if(json.income_events?.length) await db.from('income_events').insert(strip(json.income_events));
+    if(json.savings_goals?.length) await db.from('savings_goals').insert(strip(json.savings_goals));
+  },
+};
+
+/* ── Shared Components ── */
+function MCard({label,val,sub,color,small}){
+  return(
+    <div className="mcard">
+      <div className="mcard-label">{label}</div>
+      <div className="mcard-val" style={{color:color||'var(--text)',fontSize:small?'18px':undefined}}>{val}</div>
+      {sub&&<div className="mcard-sub">{sub}</div>}
+    </div>
+  );
+}
+function Empty({h,msg,icon}){
+  return(
+    <div className="empty">
+      <div className="empty-icon">{icon||'💸'}</div>
+      <h3>{h}</h3>
+      <p>{msg}</p>
+    </div>
+  );
+}
+function ProgBar({pct,color}){
+  const p=Math.min(100,Math.max(0,pct||0));
+  const c=p>90?'var(--red)':p>70?'var(--amber)':(color||'var(--accent)');
+  return<div className="prog-bar"><div className="prog-fill" style={{width:p+'%',background:c}}/></div>;
+}
+function ExportBtn({uid,toast_}){
+  const[busy,setBusy]=useState(false);
+  async function go(){
+    setBusy(true);
+    try{
+      const data=await D.exportData(uid);
+      const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download=`budget-export-${today()}.json`;a.click();
+      URL.revokeObjectURL(url);
+      toast_('Exported!','success');
+    }catch(e){toast_('Export failed','error');}
+    setBusy(false);
+  }
+  return<button className="btn btn-ghost btn-sm" onClick={go} disabled={busy}>{busy?'Exporting…':'⬇ Export Data'}</button>;
+}
+
+/* ── Charts ── */
+function DonutChart({segments,size=120,thick=18,center}){
+  const r=size/2-thick/2;
+  const circ=2*Math.PI*r;
+  let offset=0;
+  const total=segments.reduce((s,x)=>s+(x.value||0),0)||1;
+  return(
+    <div className="donut-wrap" style={{width:size,height:size}}>
+      <svg width={size} height={size}>
+        {segments.map((seg,i)=>{
+          const pct=(seg.value||0)/total;
+          const dash=pct*circ;
+          const el=<circle key={i} r={r} cx={size/2} cy={size/2}
+            fill="none" stroke={seg.color||'#6c63ff'} strokeWidth={thick}
+            strokeDasharray={`${dash} ${circ-dash}`}
+            strokeDashoffset={-offset*circ}
+            style={{transform:'rotate(-90deg)',transformOrigin:'center'}}
+          />;
+          offset+=pct;
+          return el;
+        })}
+        {!segments.length&&<circle r={r} cx={size/2} cy={size/2} fill="none" stroke="var(--border)" strokeWidth={thick}/>}
+      </svg>
+      {center&&<div className="donut-center">{center}</div>}
+    </div>
+  );
+}
+function SVGBarChart({data,height=120,color='#6c63ff'}){
+  if(!data||!data.length) return null;
+  const max=Math.max(...data.map(d=>d.value||0))||1;
+  const w=300,bw=Math.min(28,(w/data.length)-4);
+  return(
+    <svg viewBox={`0 0 ${w} ${height}`} style={{width:'100%',height}}>
+      {data.map((d,i)=>{
+        const x=i*(w/data.length)+(w/data.length-bw)/2;
+        const bh=Math.max(2,((d.value||0)/max)*(height-24));
+        const y=height-bh-16;
+        return(
+          <g key={i}>
+            <rect x={x} y={y} width={bw} height={bh} rx={4} fill={d.color||color}/>
+            <text x={x+bw/2} y={height-2} textAnchor="middle" fill="var(--muted)" fontSize="9">{d.label}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+function SVGLineChart({data,height=80,color='#6c63ff'}){
+  if(!data||data.length<2) return null;
+  const vals=data.map(d=>d.value||0);
+  const max=Math.max(...vals)||1;
+  const min=Math.min(...vals);
+  const range=max-min||1;
+  const w=300,pad=8;
+  const pts=data.map((d,i)=>{
+    const x=pad+i*(w-pad*2)/(data.length-1);
+    const y=pad+(1-(d.value-min)/range)*(height-pad*2);
+    return[x,y];
+  });
+  const path='M'+pts.map(p=>p.join(',')).join(' L');
+  return(
+    <svg viewBox={`0 0 ${w} ${height}`} style={{width:'100%',height}}>
+      <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+      {pts.map(([x,y],i)=><circle key={i} cx={x} cy={y} r="3" fill={color}/>)}
+    </svg>
+  );
+}
+
+/* ── Toast ── */
+function useToast(){
+  const[toasts,setToasts]=useState([]);
+  const toast_=useCallback((msg,type='info')=>{
+    const id=Date.now();
+    setToasts(t=>[...t,{id,msg,type}]);
+    setTimeout(()=>setToasts(t=>t.filter(x=>x.id!==id)),3000);
+  },[]);
+  const ToastContainer=()=>(
+    <div className="toast-wrap">
+      {toasts.map(t=><div key={t.id} className={`toast ${t.type}`}>{t.msg}</div>)}
+    </div>
+  );
+  return{toast_,ToastContainer};
+}
+
+/* ══════════════════════════════════════════════
+   AUTH SCREEN
+══════════════════════════════════════════════ */
+function AuthScreen({onAuth}){
+  const[mode,setMode]=useState('login');
+  const[email,setEmail]=useState('');
+  const[pass,setPass]=useState('');
+  const[busy,setBusy]=useState(false);
+  const[err,setErr]=useState('');
+  const{toast_,ToastContainer}=useToast();
+
+  async function submit(e){
+    e.preventDefault();
+    setBusy(true);setErr('');
+    try{
+      if(mode==='login'){
+        const{data,error}=await db.auth.signInWithPassword({email,password:pass});
+        if(error) throw error;
+        onAuth(data.user);
+      }else{
+        const{data,error}=await db.auth.signUp({email,password:pass});
+        if(error) throw error;
+        if(data.user&&!data.user.email_confirmed_at){
+          setErr('Check your email to confirm your account, then log in.');
+          setBusy(false);return;
+        }
+        onAuth(data.user);
+      }
+    }catch(e){setErr(e.message||'Something went wrong');}
+    setBusy(false);
+  }
+
+  return(
+    <div className="auth-wrap">
+      <ToastContainer/>
+      <div className="auth-card">
+        <div className="auth-title">💰 Budget</div>
+        <div className="auth-sub">{mode==='login'?'Sign in to your account':'Create your free account'}</div>
+        <form onSubmit={submit}>
+          <div className="field">
+            <label>Email</label>
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required autoComplete="email"/>
+          </div>
+          <div className="field">
+            <label>Password</label>
+            <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" required autoComplete={mode==='login'?'current-password':'new-password'} minLength={6}/>
+          </div>
+          {err&&<div style={{color:'var(--red)',fontSize:13,marginBottom:12}}>{err}</div>}
+          <button className="btn btn-primary" type="submit" disabled={busy}>
+            {busy?'Please wait…':mode==='login'?'Sign In':'Create Account'}
+          </button>
+        </form>
+        <div className="auth-toggle">
+          {mode==='login'?<>Don't have an account? <button onClick={()=>{setMode('signup');setErr('')}}>Sign up</button></>
+            :<>Already have an account? <button onClick={()=>{setMode('login');setErr('')}}>Sign in</button></>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   SETUP SCREEN
+══════════════════════════════════════════════ */
+function SetupScreen({uid,onDone}){
+  const[step,setStep]=useState(0);
+  const[freq,setFreq]=useState('semimonthly');
+  const[perCheck,setPerCheck]=useState('');
+  const[busy,setBusy]=useState(false);
+
+  async function finish(){
+    setBusy(true);
+    await D.fullSetup(uid);
+    await D.setSetting('pay_frequency',freq,uid);
+    await D.setSetting('pay_per_check',perCheck||'0',uid);
+    onDone();
+  }
+
+  return(
+    <div className="setup-wrap">
+      <div className="setup-step">
+        {step===0&&<>
+          <div className="setup-title">👋 Welcome!</div>
+          <div className="setup-sub">Let's set up your budget dashboard. It only takes a minute and you can change everything later.</div>
+          <button className="btn btn-primary" onClick={()=>setStep(1)}>Get Started →</button>
+        </>}
+        {step===1&&<>
+          <div className="setup-title">💵 Pay Schedule</div>
+          <div className="setup-sub">How often do you get paid? We'll use this to calculate your income and suggest budget periods.</div>
+          <div className="field">
+            <label>Pay Frequency</label>
+            <select value={freq} onChange={e=>setFreq(e.target.value)}>
+              <option value="semimonthly">Semi-monthly (1st & 15th)</option>
+              <option value="biweekly">Every 2 weeks</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Typical take-home per paycheck (optional)</label>
+            <input type="number" value={perCheck} onChange={e=>setPerCheck(e.target.value)} placeholder="0" min="0" step="1"/>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-ghost" onClick={()=>setStep(0)} style={{flex:1}}>Back</button>
+            <button className="btn btn-primary" onClick={finish} disabled={busy} style={{flex:2}}>{busy?'Setting up…':'Finish Setup →'}</button>
+          </div>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   CLAIM BANNER
+══════════════════════════════════════════════ */
+function ClaimBanner({uid,onClaim,onDismiss}){
+  const[busy,setBusy]=useState(false);
+  async function claim(){
+    setBusy(true);
+    await D.claimLegacyData(uid);
+    onClaim();
+  }
+  return(
+    <div className="claim-banner">
+      <p>📦 We found existing data that isn't linked to an account yet. Want to claim it as yours?</p>
+      <div className="claim-actions">
+        <button className="btn btn-primary btn-sm" onClick={claim} disabled={busy} style={{flex:1}}>{busy?'Claiming…':'Claim My Data'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={onDismiss} style={{flex:1}}>Ignore</button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   ADD TRANSACTION MODAL
+══════════════════════════════════════════════ */
+function AddModal({uid,categories,accounts,quickLog,onSave,onClose,toast_,prefill}){
+  const[mode,setMode]=useState('quick'); // quick | manual
+  const[desc,setDesc]=useState(prefill?.description||'');
+  const[amt,setAmt]=useState(prefill?.amount||'');
+  const[cat,setCat]=useState(prefill?.category||categories[0]?.name||'');
+  const[acct,setAcct]=useState(prefill?.account||accounts[0]?.name||'Checking');
+  const[date,setDate]=useState(today());
+  const[note,setNote]=useState('');
+  const[saving,setSaving]=useState(false);
+
+  async function save(){
+    if(!amt||isNaN(amt)){toast_('Enter a valid amount','error');return;}
+    if(!desc){toast_('Enter a description','error');return;}
+    setSaving(true);
+    const{error}=await D.addTx({
+      description:desc,amount:parseFloat(amt),category:cat,
+      account:acct,date,note,type:'expense'
+    },uid);
+    if(error){toast_(error.message||'Save failed','error');}
+    else{toast_('Logged!','success');onSave();}
+    setSaving(false);
+  }
+
+  async function quickSave(ql){
+    setSaving(true);
+    const{error}=await D.addTx({
+      description:ql.name||ql.label,
+      amount:parseFloat(ql.default_amount||ql.amount||0),
+      category:ql.category,account:ql.account||accounts[0]?.name||'Checking',
+      date:today(),note:'',type:'expense'
+    },uid);
+    if(error){toast_(error.message,'error');}
+    else{toast_(`Logged ${ql.name||ql.label}!`,'success');onSave();}
+    setSaving(false);
+  }
+
+  return(
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal-sheet">
+        <div className="modal-handle"/>
+        <div className="modal-title">Log Expense</div>
+        <div className="tab-pills">
+          <button className={`tab-pill${mode==='quick'?' active':''}`} onClick={()=>setMode('quick')}>Quick</button>
+          <button className={`tab-pill${mode==='manual'?' active':''}`} onClick={()=>setMode('manual')}>Manual</button>
+        </div>
+        {mode==='quick'&&(
+          <div>
+            {quickLog.length===0&&<Empty h="No quick items" msg="Add quick-log items in Settings" icon="⚡"/>}
+            {quickLog.map(ql=>(
+              <div key={ql.id||ql.name} className="row-item" style={{cursor:'pointer'}} onClick={()=>quickSave(ql)}>
+                <div className="row-left">
+                  <div style={{fontWeight:600}}>{ql.name||ql.label}</div>
+                  <div style={{fontSize:12,color:'var(--muted)'}}>{ql.category}</div>
+                </div>
+                <div className="row-right">
+                  {ql.default_amount||ql.amount?<div style={{fontWeight:700}}>{fmt(ql.default_amount||ql.amount)}</div>:<div style={{color:'var(--muted)',fontSize:13}}>enter amount</div>}
+                  <div style={{color:'var(--accent)',fontSize:20}}>+</div>
+                </div>
+              </div>
+            ))}
+            <div style={{height:8}}/>
+            <button className="btn btn-ghost" onClick={()=>setMode('manual')}>Enter custom amount →</button>
+          </div>
+        )}
+        {mode==='manual'&&(
+          <div>
+            <div className="field">
+              <label>Description</label>
+              <input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="What did you spend on?"/>
+            </div>
+            <div className="field">
+              <label>Amount</label>
+              <input type="number" value={amt} onChange={e=>setAmt(e.target.value)} placeholder="0.00" min="0" step="0.01" inputMode="decimal"/>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+              <div className="field">
+                <label>Category</label>
+                <select value={cat} onChange={e=>setCat(e.target.value)}>
+                  {categories.map(c=><option key={c.id||c.name} value={c.name}>{c.icon} {c.name}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label>Account</label>
+                <select value={acct} onChange={e=>setAcct(e.target.value)}>
+                  {accounts.map(a=><option key={a.id||a.name} value={a.name}>{a.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label>Date</label>
+              <input type="date" value={date} onChange={e=>setDate(e.target.value)}/>
+            </div>
+            <div className="field">
+              <label>Note (optional)</label>
+              <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Optional note"/>
+            </div>
+            <button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving…':'Log Expense'}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   LOG INCOME MODAL
+══════════════════════════════════════════════ */
+function IncomeModal({uid,accounts,onSave,onClose,toast_}){
+  const[type,setType]=useState('paycheck');
+  const[amt,setAmt]=useState('');
+  const[date,setDate]=useState(today());
+  const[acct,setAcct]=useState(accounts[0]?.name||'Checking');
+  const[note,setNote]=useState('');
+  const[saving,setSaving]=useState(false);
+
+  async function save(){
+    if(!amt||isNaN(amt)){toast_('Enter a valid amount','error');return;}
+    setSaving(true);
+    const{error}=await D.addIncomeEvent({type,amount:parseFloat(amt),date,account:acct,note},uid);
+    if(error){toast_(error.message,'error');}
+    else{toast_('Income logged!','success');onSave();}
+    setSaving(false);
+  }
+
+  return(
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal-sheet">
+        <div className="modal-handle"/>
+        <div className="modal-title">Log Income</div>
+        <div className="tab-pills">
+          {['paycheck','bonus','other'].map(t=>(
+            <button key={t} className={`tab-pill${type===t?' active':''}`} onClick={()=>setType(t)} style={{textTransform:'capitalize'}}>{t}</button>
+          ))}
+        </div>
+        <div className="field">
+          <label>Amount</label>
+          <input type="number" value={amt} onChange={e=>setAmt(e.target.value)} placeholder="0.00" min="0" step="0.01" inputMode="decimal" autoFocus/>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div className="field">
+            <label>Date</label>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)}/>
+          </div>
+          <div className="field">
+            <label>To Account</label>
+            <select value={acct} onChange={e=>setAcct(e.target.value)}>
+              {accounts.map(a=><option key={a.id||a.name} value={a.name}>{a.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="field">
+          <label>Note (optional)</label>
+          <input value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g. January paycheck"/>
+        </div>
+        <button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving…':'Log Income'}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   DASH TAB
+══════════════════════════════════════════════ */
+function DashTab({data,uid,onAdd,onAddIncome,toast_}){
+  const{transactions=[],fixed_items=[],income_events=[],accounts=[],categories=[],settings=[],savings_goals=[]}=data;
+
+  // Current month
+  const now=new Date();
+  const mStart=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  const mTx=transactions.filter(t=>t.date>=mStart&&t.type!=='income');
+  const mSpend=mTx.reduce((s,t)=>s+parseFloat(t.amount||0),0);
+
+  // Income this month
+  const mIncome=income_events
+    .filter(e=>e.date>=mStart)
+    .reduce((s,e)=>s+parseFloat(e.amount||0),0);
+
+  // Last paycheck
+  const lastPay=income_events
+    .filter(e=>e.type==='paycheck')
+    .sort((a,b)=>b.date.localeCompare(a.date))[0];
+
+  // Per-check estimate from settings
+  const perCheckSetting=parseFloat(settings.find(s=>(s.key||s.id)==='pay_per_check')?.value||0)||0;
+
+  // Net this month
+  const net=mIncome-mSpend;
+
+  // Status
+  let statusColor='green',statusMsg='',statusIcon='✅';
+  if(net<0){statusColor='red';statusMsg=`Spending ${fmt(Math.abs(net))} more than earned this month`;statusIcon='⚠️';}
+  else if(mIncome===0){statusColor='blue';statusMsg='Log your income to see your status';statusIcon='💡';}
+  else if(net/mIncome<0.1){statusColor='amber';statusMsg=`Almost even — ${fmt(net)} remaining`;statusIcon='📊';}
+  else{statusMsg=`${fmt(net)} ahead this month`;statusIcon='✅';}
+
+  // Upcoming bills
+  const todayStr=today();
+  const upcoming=fixed_items
+    .filter(f=>f.due_day&&f.amount>0)
+    .map(f=>{
+      const dd=nextDueDate(parseInt(f.due_day));
+      return{...f,nextDue:dd,daysAway:daysUntil(dd)};
+    })
+    .filter(f=>f.daysAway<=14)
+    .sort((a,b)=>a.daysAway-b.daysAway);
+
+  // Spending by category donut
+  const catSpend={};
+  mTx.forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+parseFloat(t.amount||0)});
+  const donutSegs=Object.entries(catSpend).map(([cat,val])=>{
+    const c=categories.find(x=>x.name===cat);
+    return{label:cat,value:val,color:c?.color||'#6c63ff'};
+  }).sort((a,b)=>b.value-a.value).slice(0,6);
+
+  return(
+    <div>
+      {/* Status banner */}
+      <div className={`sbanner ${statusColor}`}>
+        <span style={{fontSize:20}}>{statusIcon}</span>
+        <span>{statusMsg||'Good job keeping track!'}</span>
+      </div>
+
+      {/* Key metrics */}
+      <div className="grid2">
+        <MCard label="Spent This Month" val={fmt(mSpend)} sub={`of ${mIncome?fmt(mIncome):'no income logged'}`} color="var(--red)"/>
+        <MCard label="Income This Month" val={fmt(mIncome)} sub={lastPay?`Last: ${dayLabel(lastPay.date)}`:'Tap + to log'} color="var(--green)"/>
+      </div>
+      <div className="grid2">
+        <MCard label="Net" val={(net>=0?'+':'-')+fmt(Math.abs(net))} sub="income minus spending" color={net>=0?'var(--green)':'var(--red)'}/>
+        <MCard label="Transactions" val={mTx.length} sub="this month"/>
+      </div>
+
+      {/* Quick actions */}
+      <div style={{display:'flex',gap:8,marginBottom:16}}>
+        <button className="btn btn-primary" onClick={onAdd} style={{flex:1}}>+ Log Expense</button>
+        <button className="btn btn-secondary" onClick={onAddIncome} style={{flex:1}}>+ Log Income</button>
+      </div>
+
+      {/* Upcoming bills */}
+      {upcoming.length>0&&(
+        <div className="card">
+          <div className="section-title">⏰ Coming Up (14 days)</div>
+          {upcoming.map((f,i)=>(
+            <div key={i} className="bill-row">
+              <div className="bill-info">
+                <div className="bill-name">{f.name}</div>
+                <div className={`bill-due${f.daysAway<=3?' bill-overdue':f.daysAway<=7?' bill-soon':''}`}>
+                  {f.daysAway===0?'Due today':f.daysAway===1?'Due tomorrow':`Due in ${f.daysAway} days`} · {f.account||''}
+                </div>
+              </div>
+              <div className="bill-amt">{fmt(f.amount)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Spending donut */}
+      {donutSegs.length>0&&(
+        <div className="card">
+          <div className="section-title">This Month by Category</div>
+          <div style={{display:'flex',alignItems:'center',gap:20}}>
+            <DonutChart segments={donutSegs} size={120} center={
+              <><div style={{fontWeight:800,fontSize:15}}>{fmt(mSpend)}</div><div style={{fontSize:10,color:'var(--muted)'}}>spent</div></>
+            }/>
+            <div style={{flex:1}}>
+              {donutSegs.map((s,i)=>(
+                <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <div style={{width:8,height:8,borderRadius:'50%',background:s.color,flexShrink:0}}/>
+                    <span style={{fontSize:13,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:110}}>{s.label}</span>
+                  </div>
+                  <span style={{fontSize:13,fontWeight:600}}>{fmt(s.value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Savings goals preview */}
+      {savings_goals.filter(g=>!g.archived).length>0&&(
+        <div className="card">
+          <div className="section-title">🎯 Savings Goals</div>
+          {savings_goals.filter(g=>!g.archived).slice(0,3).map(g=>{
+            const pct=g.target_amount?Math.round((g.current_amount/g.target_amount)*100):0;
+            return(
+              <div key={g.id} style={{marginBottom:12}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                  <span style={{fontWeight:600}}>{g.emoji||'🎯'} {g.name}</span>
+                  <span style={{fontSize:13,color:'var(--muted)'}}>{fmt(g.current_amount)} / {fmt(g.target_amount)}</span>
+                </div>
+                <ProgBar pct={pct} color={g.color||'var(--accent)'}/>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {transactions.length===0&&mIncome===0&&(
+        <Empty h="Fresh start!" msg="Log your first expense or income to get started." icon="🚀"/>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   TRANSACTIONS TAB
+══════════════════════════════════════════════ */
+function TransTab({data,uid,onAdd,toast_,reload}){
+  const{transactions=[],categories=[]}=data;
+  const[search,setSearch]=useState('');
+  const[filter,setFilter]=useState('all');
+  const[deleting,setDeleting]=useState(null);
+
+  const months=useMemo(()=>{
+    const s=new Set(transactions.map(t=>t.date?.slice(0,7)));
+    return['all',...[...s].sort().reverse()];
+  },[transactions]);
+
+  const visible=useMemo(()=>{
+    let tx=[...transactions].sort((a,b)=>b.date?.localeCompare(a.date));
+    if(filter!=='all') tx=tx.filter(t=>t.date?.startsWith(filter));
+    if(search) tx=tx.filter(t=>(t.description||'').toLowerCase().includes(search.toLowerCase())||(t.category||'').toLowerCase().includes(search.toLowerCase()));
+    return tx;
+  },[transactions,filter,search]);
+
+  async function del(id){
+    setDeleting(id);
+    await D.deleteTx(id);
+    toast_('Deleted','success');
+    await reload();
+    setDeleting(null);
+  }
+
+  return(
+    <div>
+      <div className="field" style={{marginBottom:8}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Search transactions…"/>
+      </div>
+      <div className="tab-pills">
+        {months.slice(0,6).map(m=>(
+          <button key={m} className={`tab-pill${filter===m?' active':''}`} onClick={()=>setFilter(m)}>
+            {m==='all'?'All':monthLabel(m+'-01')}
+          </button>
+        ))}
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div style={{color:'var(--muted)',fontSize:13}}>{visible.length} transactions</div>
+        <button className="btn btn-primary btn-sm" onClick={onAdd}>+ Add</button>
+      </div>
+      {visible.length===0&&<Empty h="No transactions" msg="Nothing matches your filter." icon="🔍"/>}
+      {visible.map(t=>{
+        const c=categories.find(x=>x.name===t.category);
+        return(
+          <div key={t.id} className="card-sm" style={{marginBottom:8,display:'flex',alignItems:'center',gap:12}}>
+            <div style={{fontSize:24}}>{c?.icon||'📦'}</div>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:600,fontSize:15}}>{t.description}</div>
+              <div style={{fontSize:12,color:'var(--muted)'}}>{t.category} · {dayLabel(t.date)} · {t.account}</div>
+            </div>
+            <div style={{textAlign:'right'}}>
+              <div style={{fontWeight:700,color:t.type==='income'?'var(--green)':'var(--text)'}}>{t.type==='income'?'+':''}{fmt(t.amount)}</div>
+              <button style={{background:'none',border:'none',color:'var(--muted)',cursor:'pointer',fontSize:12,padding:'2px 0'}} onClick={()=>del(t.id)} disabled={deleting===t.id}>{deleting===t.id?'…':'✕'}</button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   INCOME TAB
+══════════════════════════════════════════════ */
+function IncomeTab({data,uid,onAdd,toast_,reload}){
+  const{income_events=[],settings=[]}=data;
+  const perCheck=parseFloat(settings.find(s=>(s.key||s.id)==='pay_per_check')?.value||0)||0;
+  const freq=settings.find(s=>(s.key||s.id)==='pay_frequency')?.value||'semimonthly';
+
+  const sorted=[...income_events].sort((a,b)=>b.date.localeCompare(a.date));
+  const totalYear=income_events.filter(e=>{
+    const y=new Date().getFullYear();
+    return e.date.startsWith(String(y));
+  }).reduce((s,e)=>s+parseFloat(e.amount||0),0);
+
+  const totalMonth=income_events.filter(e=>{
+    const now=new Date();
+    return e.date.startsWith(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);
+  }).reduce((s,e)=>s+parseFloat(e.amount||0),0);
+
+  const byType={paycheck:0,bonus:0,other:0};
+  income_events.forEach(e=>{byType[e.type]=(byType[e.type]||0)+parseFloat(e.amount||0)});
+
+  return(
+    <div>
+      <div className="grid2">
+        <MCard label="This Month" val={fmt(totalMonth)} color="var(--green)"/>
+        <MCard label="This Year" val={fmt(totalYear)} sub="all sources"/>
+      </div>
+      {perCheck>0&&(
+        <div className="card" style={{marginBottom:12}}>
+          <div style={{fontSize:13,color:'var(--muted)',marginBottom:4}}>Expected per paycheck</div>
+          <div style={{fontSize:22,fontWeight:800}}>{fmt(perCheck)}</div>
+          <div style={{fontSize:12,color:'var(--muted)',marginTop:4}}>{freq} · change in Settings</div>
+        </div>
+      )}
+      <div className="grid3">
+        <div className="card-sm" style={{textAlign:'center'}}>
+          <div style={{fontSize:11,color:'var(--muted)',fontWeight:700,textTransform:'uppercase',marginBottom:4}}>Paychecks</div>
+          <div style={{fontWeight:700}}>{fmt(byType.paycheck)}</div>
+        </div>
+        <div className="card-sm" style={{textAlign:'center'}}>
+          <div style={{fontSize:11,color:'var(--muted)',fontWeight:700,textTransform:'uppercase',marginBottom:4}}>Bonuses</div>
+          <div style={{fontWeight:700,color:'var(--accent2)'}}>{fmt(byType.bonus)}</div>
+        </div>
+        <div className="card-sm" style={{textAlign:'center'}}>
+          <div style={{fontSize:11,color:'var(--muted)',fontWeight:700,textTransform:'uppercase',marginBottom:4}}>Other</div>
+          <div style={{fontWeight:700,color:'var(--amber)'}}>{fmt(byType.other)}</div>
+        </div>
+      </div>
+      <button className="btn btn-primary" onClick={onAdd} style={{marginBottom:16}}>+ Log Income</button>
+      {sorted.length===0&&<Empty h="No income logged" msg="Log your first paycheck to get started." icon="💵"/>}
+      {sorted.map(e=>(
+        <div key={e.id} className="card-sm" style={{marginBottom:8,display:'flex',alignItems:'center',gap:12}}>
+          <div style={{fontSize:24}}>{e.type==='paycheck'?'💵':e.type==='bonus'?'🎉':'💰'}</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:600}}>{e.note||e.type.charAt(0).toUpperCase()+e.type.slice(1)}</div>
+            <div style={{fontSize:12,color:'var(--muted)'}}>{dayLabel(e.date)} · {e.account}</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontWeight:700,color:'var(--green)'}}>+{fmt(e.amount)}</div>
+            <span className={`inc-type inc-${e.type}`}>{e.type}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   BUDGET TAB
+══════════════════════════════════════════════ */
+function BudgetTab({data,uid,toast_,reload}){
+  const{transactions=[],categories=[],budget_targets=[],fixed_items=[],settings=[]}=data;
+  const[sub,setSub]=useState('spend');
+  const[editBudget,setEditBudget]=useState(null);
+  const[editFixed,setEditFixed]=useState(null);
+  const[newFixed,setNewFixed]=useState(false);
+
+  const now=new Date();
+  const mStart=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  const mTx=transactions.filter(t=>t.date>=mStart&&t.type!=='income');
+
+  const catSpend={};
+  mTx.forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+parseFloat(t.amount||0)});
+
+  const budgeted=budget_targets.reduce((s,b)=>s+parseFloat(b.amount||0),0);
+  const totalFixed=fixed_items.reduce((s,f)=>s+parseFloat(f.amount||0),0);
+
+  async function saveBudget(cat,amt){
+    await D.setBudget(cat,parseFloat(amt)||0,uid);
+    toast_('Budget saved','success');
+    setEditBudget(null);
+    await reload();
+  }
+
+  return(
+    <div>
+      <div className="tab-pills">
+        <button className={`tab-pill${sub==='spend'?' active':''}`} onClick={()=>setSub('spend')}>Spending</button>
+        <button className={`tab-pill${sub==='bills'?' active':''}`} onClick={()=>setSub('bills')}>Fixed Bills</button>
+      </div>
+
+      {sub==='spend'&&(
+        <div>
+          <div className="grid2" style={{marginBottom:12}}>
+            <MCard label="Budgeted" val={fmt(budgeted)} sub="per month"/>
+            <MCard label="Spent" val={fmt(mTx.reduce((s,t)=>s+parseFloat(t.amount||0),0))} sub="this month"/>
+          </div>
+          {categories.map(c=>{
+            const spent=catSpend[c.name]||0;
+            const budget=parseFloat(budget_targets.find(b=>b.category===c.name)?.amount||0);
+            const pct=budget?Math.round((spent/budget)*100):0;
+            return(
+              <div key={c.id||c.name} className="card-sm" style={{marginBottom:8}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:18}}>{c.icon}</span>
+                    <span style={{fontWeight:600}}>{c.name}</span>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontWeight:700,fontSize:15}}>{fmt(spent)}{budget?<span style={{color:'var(--muted)',fontWeight:400}}> / {fmt(budget)}</span>:''}</div>
+                    {editBudget===c.name?null:<button onClick={()=>setEditBudget(c.name)} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12}}>set budget</button>}
+                  </div>
+                </div>
+                {budget>0&&<ProgBar pct={pct} color={c.color}/>}
+                {editBudget===c.name&&(
+                  <BudgetInlineEdit cat={c.name} current={budget} onSave={saveBudget} onCancel={()=>setEditBudget(null)}/>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {sub==='bills'&&(
+        <div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <MCard label="Monthly Fixed" val={fmt(totalFixed)}/>
+            <button className="btn btn-primary btn-sm" onClick={()=>setNewFixed(true)}>+ Add Bill</button>
+          </div>
+          {fixed_items.length===0&&<Empty h="No fixed bills" msg="Add recurring bills to track them on your calendar." icon="📅"/>}
+          {fixed_items.map(f=>(
+            <FixedItemRow key={f.id} item={f} uid={uid} toast_={toast_} reload={reload}/>
+          ))}
+          {newFixed&&<FixedItemForm uid={uid} onSave={async()=>{setNewFixed(false);await reload();}} onCancel={()=>setNewFixed(false)} toast_={toast_}/>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BudgetInlineEdit({cat,current,onSave,onCancel}){
+  const[val,setVal]=useState(current||'');
+  return(
+    <div style={{display:'flex',gap:8,marginTop:8}}>
+      <input type="number" value={val} onChange={e=>setVal(e.target.value)} placeholder="Monthly budget" style={{flex:1,background:'var(--bg)',border:'1px solid var(--border)',borderRadius:6,padding:'8px 12px',color:'var(--text)',fontSize:15}}/>
+      <button className="btn btn-primary btn-sm" onClick={()=>onSave(cat,val)}>Save</button>
+      <button className="btn btn-ghost btn-sm" onClick={onCancel}>✕</button>
+    </div>
+  );
+}
+
+function FixedItemRow({item,uid,toast_,reload}){
+  const[editing,setEditing]=useState(false);
+  async function del(){
+    await D.deleteFixedItem(item.id);
+    toast_('Removed','success');
+    await reload();
+  }
+  if(editing) return<FixedItemForm uid={uid} item={item} onSave={async()=>{setEditing(false);await reload();}} onCancel={()=>setEditing(false)} toast_={toast_}/>;
+  return(
+    <div className="card-sm" style={{marginBottom:8,display:'flex',alignItems:'center',gap:12}}>
+      <div style={{flex:1}}>
+        <div style={{fontWeight:600}}>{item.name}</div>
+        <div style={{fontSize:12,color:'var(--muted)'}}>Due day {item.due_day||'?'} · {item.account||''} · {item.category||''}</div>
+      </div>
+      <div style={{textAlign:'right'}}>
+        <div style={{fontWeight:700}}>{fmt(item.amount)}</div>
+        <div style={{display:'flex',gap:6}}>
+          <button style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12}} onClick={()=>setEditing(true)}>edit</button>
+          <button style={{background:'none',border:'none',color:'var(--red)',cursor:'pointer',fontSize:12}} onClick={del}>✕</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FixedItemForm({uid,item,onSave,onCancel,toast_}){
+  const[name,setName]=useState(item?.name||'');
+  const[amt,setAmt]=useState(item?.amount||'');
+  const[day,setDay]=useState(item?.due_day||'');
+  const[acct,setAcct]=useState(item?.account||'');
+  const[cat,setCat]=useState(item?.category||'');
+  const[saving,setSaving]=useState(false);
+  async function save(){
+    if(!name||!amt){toast_('Name and amount required','error');return;}
+    setSaving(true);
+    if(item?.id){await D.updateFixedItem(item.id,{name,amount:parseFloat(amt),due_day:parseInt(day)||null,account:acct,category:cat});}
+    else{await D.addFixedItem({name,amount:parseFloat(amt),due_day:parseInt(day)||null,account:acct,category:cat},uid);}
+    toast_('Saved','success');await onSave();setSaving(false);
+  }
+  return(
+    <div className="card" style={{marginBottom:8}}>
+      <div style={{fontWeight:600,marginBottom:12}}>{item?'Edit Bill':'New Fixed Bill'}</div>
+      <div className="field"><label>Name</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Rent"/></div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+        <div className="field"><label>Amount</label><input type="number" value={amt} onChange={e=>setAmt(e.target.value)} placeholder="0.00" inputMode="decimal"/></div>
+        <div className="field"><label>Due Day</label><input type="number" value={day} onChange={e=>setDay(e.target.value)} placeholder="1-31" min="1" max="31"/></div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+        <div className="field"><label>Account</label><input value={acct} onChange={e=>setAcct(e.target.value)} placeholder="Checking"/></div>
+        <div className="field"><label>Category</label><input value={cat} onChange={e=>setCat(e.target.value)} placeholder="Housing"/></div>
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving} style={{flex:1}}>{saving?'Saving…':'Save'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   DEBTS TAB
+══════════════════════════════════════════════ */
+function DebtTab({data,uid,toast_,reload}){
+  const{debts=[],savings_goals=[]}=data;
+  const[sub,setSub]=useState('debts');
+  const[adding,setAdding]=useState(false);
+  const[editDebt,setEditDebt]=useState(null);
+  const[editGoal,setEditGoal]=useState(null);
+  const[addGoal,setAddGoal]=useState(false);
+
+  const totalDebt=debts.filter(d=>d.current_balance>0).reduce((s,d)=>s+parseFloat(d.current_balance||0),0);
+  const totalMonthly=debts.filter(d=>d.current_balance>0).reduce((s,d)=>s+parseFloat(d.monthly_payment||0),0);
+  const timeline=useMemo(()=>calcPayoffTimeline(debts),[debts]);
+
+  const activeGoals=savings_goals.filter(g=>!g.archived);
+  const totalSaved=activeGoals.reduce((s,g)=>s+parseFloat(g.current_amount||0),0);
+  const totalGoal=activeGoals.reduce((s,g)=>s+parseFloat(g.target_amount||0),0);
+
+  return(
+    <div>
+      <div className="tab-pills">
+        <button className={`tab-pill${sub==='debts'?' active':''}`} onClick={()=>setSub('debts')}>Debts</button>
+        <button className={`tab-pill${sub==='goals'?' active':''}`} onClick={()=>setSub('goals')}>Goals</button>
+        <button className={`tab-pill${sub==='timeline'?' active':''}`} onClick={()=>setSub('timeline')}>Timeline</button>
+      </div>
+
+      {sub==='debts'&&(
+        <div>
+          <div className="grid2" style={{marginBottom:12}}>
+            <MCard label="Total Debt" val={fmt(totalDebt)} color="var(--red)"/>
+            <MCard label="Monthly Payments" val={fmt(totalMonthly)} sub="combined"/>
+          </div>
+          <button className="btn btn-secondary" onClick={()=>setAdding(true)} style={{marginBottom:12}}>+ Add Debt</button>
+          {debts.length===0&&<Empty h="No debts" msg="Add loans, credit cards, and other debts to track payoff." icon="💳"/>}
+          {debts.map(d=>(
+            <DebtCard key={d.id} debt={d} uid={uid} toast_={toast_} reload={reload}/>
+          ))}
+          {adding&&<DebtForm uid={uid} onSave={async()=>{setAdding(false);await reload();}} onCancel={()=>setAdding(false)} toast_={toast_}/>}
+        </div>
+      )}
+
+      {sub==='goals'&&(
+        <div>
+          <div className="grid2" style={{marginBottom:12}}>
+            <MCard label="Total Saved" val={fmt(totalSaved)} color="var(--accent2)"/>
+            <MCard label="Total Goal" val={fmt(totalGoal)}/>
+          </div>
+          <button className="btn btn-secondary" onClick={()=>setAddGoal(true)} style={{marginBottom:12}}>+ Add Goal</button>
+          {activeGoals.length===0&&<Empty h="No goals yet" msg="Create a savings goal like a vacation, emergency fund, or car." icon="🎯"/>}
+          {activeGoals.map(g=>(
+            <GoalCard key={g.id} goal={g} uid={uid} toast_={toast_} reload={reload}/>
+          ))}
+          {addGoal&&<GoalForm uid={uid} onSave={async()=>{setAddGoal(false);await reload();}} onCancel={()=>setAddGoal(false)} toast_={toast_}/>}
+        </div>
+      )}
+
+      {sub==='timeline'&&(
+        <div>
+          {timeline.length===0&&<Empty h="No payoff timeline" msg="Add debts with balances and monthly payments to see your payoff order." icon="📅"/>}
+          {timeline.length>0&&(
+            <>
+              <div className="sbanner blue" style={{marginBottom:12}}>
+                <span style={{fontSize:20}}>🏁</span>
+                <span>Debt-free by ~{monthLabel(timeline[timeline.length-1].date+'-01')}</span>
+              </div>
+              {timeline.map((ev,i)=>(
+                <div key={i} style={{display:'flex',gap:12,marginBottom:16}}>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
+                    <div style={{width:14,height:14,borderRadius:'50%',background:ev.color,flexShrink:0,marginTop:3}}/>
+                    {i<timeline.length-1&&<div style={{width:2,flex:1,background:'var(--border)',marginTop:4}}/>}
+                  </div>
+                  <div style={{flex:1,paddingBottom:12}}>
+                    <div style={{fontWeight:700,fontSize:15}}>{ev.event}</div>
+                    <div style={{fontSize:12,color:'var(--muted)'}}>{monthLabel(ev.date+'-01')} · {ev.sub}</div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DebtCard({debt,uid,toast_,reload}){
+  const[editing,setEditing]=useState(false);
+  const pct=debt.original_balance?Math.round(((debt.original_balance-debt.current_balance)/debt.original_balance)*100):0;
+  async function del(){
+    await D.deleteDebt(debt.id);
+    toast_('Removed','success');
+    await reload();
+  }
+  if(editing) return<DebtForm uid={uid} item={debt} onSave={async()=>{setEditing(false);await reload();}} onCancel={()=>setEditing(false)} toast_={toast_}/>;
+  return(
+    <div className="card" style={{marginBottom:10}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+        <div style={{fontWeight:700,fontSize:16}}>{debt.name}</div>
+        <div style={{fontWeight:800,fontSize:17,color:'var(--red)'}}>{fmt(debt.current_balance)}</div>
+      </div>
+      <div style={{fontSize:12,color:'var(--muted)',marginBottom:8}}>{debt.interest_rate||0}% APR · {fmt(debt.monthly_payment)}/mo</div>
+      {debt.original_balance>0&&<ProgBar pct={pct} color={debt.color||'var(--accent)'}/>}
+      <div style={{display:'flex',gap:8,marginTop:8}}>
+        <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>Edit</button>
+        <button className="btn btn-danger btn-sm" onClick={del}>Remove</button>
+      </div>
+    </div>
+  );
+}
+
+function DebtForm({uid,item,onSave,onCancel,toast_}){
+  const[name,setName]=useState(item?.name||'');
+  const[bal,setBal]=useState(item?.current_balance||'');
+  const[orig,setOrig]=useState(item?.original_balance||'');
+  const[rate,setRate]=useState(item?.interest_rate||'');
+  const[pmt,setPmt]=useState(item?.monthly_payment||'');
+  const[color,setColor]=useState(item?.color||'#6c63ff');
+  const[saving,setSaving]=useState(false);
+  async function save(){
+    if(!name||!bal){toast_('Name and balance required','error');return;}
+    setSaving(true);
+    const obj={name,current_balance:parseFloat(bal),original_balance:parseFloat(orig)||parseFloat(bal),interest_rate:parseFloat(rate)||0,monthly_payment:parseFloat(pmt)||0,color};
+    if(item?.id){await D.updateDebt(item.id,obj);}
+    else{await D.addDebt(obj,uid);}
+    toast_('Saved','success');await onSave();setSaving(false);
+  }
+  return(
+    <div className="card" style={{marginBottom:10}}>
+      <div style={{fontWeight:600,marginBottom:12}}>{item?'Edit Debt':'New Debt'}</div>
+      <div className="field"><label>Name</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Car Loan"/></div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+        <div className="field"><label>Current Balance</label><input type="number" value={bal} onChange={e=>setBal(e.target.value)} placeholder="0.00" inputMode="decimal"/></div>
+        <div className="field"><label>Original Balance</label><input type="number" value={orig} onChange={e=>setOrig(e.target.value)} placeholder="0.00" inputMode="decimal"/></div>
+        <div className="field"><label>Interest Rate %</label><input type="number" value={rate} onChange={e=>setRate(e.target.value)} placeholder="0.0" inputMode="decimal"/></div>
+        <div className="field"><label>Monthly Payment</label><input type="number" value={pmt} onChange={e=>setPmt(e.target.value)} placeholder="0.00" inputMode="decimal"/></div>
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving} style={{flex:1}}>{saving?'Saving…':'Save'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function GoalCard({goal,uid,toast_,reload}){
+  const[editing,setEditing]=useState(false);
+  const pct=goal.target_amount?Math.round((goal.current_amount/goal.target_amount)*100):0;
+  async function del(){
+    await D.deleteGoal(goal.id);
+    toast_('Goal removed','success');
+    await reload();
+  }
+  if(editing) return<GoalForm uid={uid} item={goal} onSave={async()=>{setEditing(false);await reload();}} onCancel={()=>setEditing(false)} toast_={toast_}/>;
+  return(
+    <div className="card" style={{marginBottom:10}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+        <div style={{fontWeight:700,fontSize:16}}>{goal.emoji||'🎯'} {goal.name}</div>
+        <div style={{fontWeight:700,color:'var(--accent2)'}}>{fmt(goal.current_amount)}</div>
+      </div>
+      <div style={{fontSize:12,color:'var(--muted)',marginBottom:8}}>Goal: {fmt(goal.target_amount)} · {pct}% there{goal.monthly_contribution?` · ${fmt(goal.monthly_contribution)}/mo`:''}</div>
+      <ProgBar pct={pct} color={goal.color||'var(--accent2)'}/>
+      <div style={{display:'flex',gap:8,marginTop:8}}>
+        <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>Edit</button>
+        <button className="btn btn-danger btn-sm" onClick={del}>Remove</button>
+      </div>
+    </div>
+  );
+}
+
+function GoalForm({uid,item,onSave,onCancel,toast_}){
+  const[name,setName]=useState(item?.name||'');
+  const[emoji,setEmoji]=useState(item?.emoji||'🎯');
+  const[target,setTarget]=useState(item?.target_amount||'');
+  const[current,setCurrent]=useState(item?.current_amount||'');
+  const[monthly,setMonthly]=useState(item?.monthly_contribution||'');
+  const[color,setColor]=useState(item?.color||'#00d4aa');
+  const[note,setNote]=useState(item?.note||'');
+  const[saving,setSaving]=useState(false);
+  async function save(){
+    if(!name||!target){toast_('Name and target required','error');return;}
+    setSaving(true);
+    const obj={name,emoji,target_amount:parseFloat(target),current_amount:parseFloat(current)||0,monthly_contribution:parseFloat(monthly)||0,color,note};
+    if(item?.id){await D.upsertGoal({...obj,id:item.id},uid);}
+    else{await D.upsertGoal(obj,uid);}
+    toast_('Saved','success');await onSave();setSaving(false);
+  }
+  return(
+    <div className="card" style={{marginBottom:10}}>
+      <div style={{fontWeight:600,marginBottom:12}}>{item?'Edit Goal':'New Goal'}</div>
+      <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:12}}>
+        <div className="field"><label>Emoji</label><input value={emoji} onChange={e=>setEmoji(e.target.value)} style={{textAlign:'center',fontSize:20}}/></div>
+        <div className="field"><label>Name</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Vacation"/></div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+        <div className="field"><label>Target Amount</label><input type="number" value={target} onChange={e=>setTarget(e.target.value)} placeholder="0.00" inputMode="decimal"/></div>
+        <div className="field"><label>Current Amount</label><input type="number" value={current} onChange={e=>setCurrent(e.target.value)} placeholder="0.00" inputMode="decimal"/></div>
+        <div className="field"><label>Monthly Saving</label><input type="number" value={monthly} onChange={e=>setMonthly(e.target.value)} placeholder="0.00" inputMode="decimal"/></div>
+      </div>
+      <div className="field"><label>Note (optional)</label><input value={note} onChange={e=>setNote(e.target.value)} placeholder="What's this for?"/></div>
+      <div style={{display:'flex',gap:8}}>
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving} style={{flex:1}}>{saving?'Saving…':'Save'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   TRENDS TAB
+══════════════════════════════════════════════ */
+function TrendsTab({data}){
+  const{transactions=[],income_events=[],categories=[]}=data;
+
+  // Last 6 months spending
+  const months6=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date();d.setMonth(d.getMonth()-i);
+    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const spend=transactions.filter(t=>t.date?.startsWith(key)&&t.type!=='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const income=income_events.filter(e=>e.date?.startsWith(key)).reduce((s,e)=>s+parseFloat(e.amount||0),0);
+    months6.push({label:new Date(d).toLocaleDateString('en-US',{month:'short'}),key,spend,income,value:spend});
+  }
+
+  // Top categories this month
+  const now=new Date();
+  const mStart=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  const catTotals={};
+  transactions.filter(t=>t.date>=mStart&&t.type!=='income').forEach(t=>{
+    catTotals[t.category]=(catTotals[t.category]||0)+parseFloat(t.amount||0);
+  });
+  const topCats=Object.entries(catTotals).map(([cat,val])=>{
+    const c=categories.find(x=>x.name===cat);
+    return{label:cat,value:val,color:c?.color||'#6c63ff'};
+  }).sort((a,b)=>b.value-a.value).slice(0,6);
+
+  const avgMonthly=months6.reduce((s,m)=>s+m.spend,0)/months6.filter(m=>m.spend>0).length||0;
+
+  return(
+    <div>
+      <div className="grid2">
+        <MCard label="Avg Monthly" val={fmt(avgMonthly)} sub="last 6 months" color="var(--amber)"/>
+        <MCard label="Total Logged" val={transactions.filter(t=>t.type!=='income').length} sub="transactions"/>
+      </div>
+
+      <div className="card">
+        <div className="section-title">Spending — Last 6 Months</div>
+        <SVGBarChart data={months6.map(m=>({label:m.label,value:m.spend,color:'var(--accent)'}))} height={100}/>
+        <div style={{display:'flex',justifyContent:'space-between',marginTop:8}}>
+          {months6.map((m,i)=>(
+            <div key={i} style={{textAlign:'center',flex:1}}>
+              <div style={{fontSize:11,fontWeight:700}}>{fmt(m.spend).replace('$','')}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="section-title">Income vs Spending</div>
+        <div>
+          {months6.map((m,i)=>(
+            <div key={i} style={{marginBottom:10}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                <span style={{fontSize:13,fontWeight:600}}>{m.label}</span>
+                <span style={{fontSize:13,color:m.income>=m.spend?'var(--green)':'var(--red)',fontWeight:700}}>
+                  {m.income>=m.spend?'+':'-'}{fmt(Math.abs(m.income-m.spend))}
+                </span>
+              </div>
+              <div style={{display:'flex',gap:4}}>
+                <div style={{flex:m.income||1,background:'var(--green)',height:6,borderRadius:3,opacity:.7}}/>
+                <div style={{flex:m.spend||0.01,background:'var(--red)',height:6,borderRadius:3,opacity:.7}}/>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:2}}>
+                <span style={{fontSize:10,color:'var(--muted)'}}>In: {fmt(m.income)}</span>
+                <span style={{fontSize:10,color:'var(--muted)'}}>Out: {fmt(m.spend)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {topCats.length>0&&(
+        <div className="card">
+          <div className="section-title">Top Categories This Month</div>
+          {topCats.map((c,i)=>(
+            <div key={i} className="row-item">
+              <div className="row-left">
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <div style={{width:10,height:10,borderRadius:'50%',background:c.color}}/>
+                  <span style={{fontWeight:600}}>{c.label}</span>
+                </div>
+              </div>
+              <div style={{fontWeight:700}}>{fmt(c.value)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   SETTINGS TAB
+══════════════════════════════════════════════ */
+function SettingsTab({data,uid,user,toast_,reload,onLogout}){
+  const{settings=[],accounts=[],quick_log_items=[],categories=[]}=data;
+  const[sub,setSub]=useState('general');
+  const[payFreq,setPayFreq]=useState(settings.find(s=>(s.key||s.id)==='pay_frequency')?.value||'semimonthly');
+  const[perCheck,setPerCheck]=useState(settings.find(s=>(s.key||s.id)==='pay_per_check')?.value||'');
+  const[saving,setSaving]=useState(false);
+  const[importFile,setImportFile]=useState(null);
+  const[importing,setImporting]=useState(false);
+
+  async function saveGeneral(){
+    setSaving(true);
+    await D.setSetting('pay_frequency',payFreq,uid);
+    await D.setSetting('pay_per_check',perCheck||'0',uid);
+    toast_('Settings saved','success');
+    await reload();
+    setSaving(false);
+  }
+
+  async function doImport(){
+    if(!importFile){toast_('Choose a file','error');return;}
+    setImporting(true);
+    try{
+      const text=await importFile.text();
+      const json=JSON.parse(text);
+      await D.importData(json,uid);
+      toast_('Import complete!','success');
+      await reload();
+    }catch(e){toast_('Import failed: '+e.message,'error');}
+    setImporting(false);
+  }
+
+  return(
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div>
+          <div style={{fontWeight:700}}>{user?.email}</div>
+          <div style={{fontSize:12,color:'var(--muted)'}}>Logged in</div>
+        </div>
+        <button className="btn btn-danger btn-sm" onClick={onLogout}>Sign Out</button>
+      </div>
+
+      <div className="tab-pills">
+        <button className={`tab-pill${sub==='general'?' active':''}`} onClick={()=>setSub('general')}>General</button>
+        <button className={`tab-pill${sub==='data'?' active':''}`} onClick={()=>setSub('data')}>Data</button>
+      </div>
+
+      {sub==='general'&&(
+        <div>
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:12}}>Pay Settings</div>
+            <div className="field">
+              <label>Pay Frequency</label>
+              <select value={payFreq} onChange={e=>setPayFreq(e.target.value)}>
+                <option value="semimonthly">Semi-monthly (1st & 15th)</option>
+                <option value="biweekly">Every 2 weeks</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Typical take-home per paycheck</label>
+              <input type="number" value={perCheck} onChange={e=>setPerCheck(e.target.value)} placeholder="0" inputMode="decimal"/>
+            </div>
+            <button className="btn btn-primary" onClick={saveGeneral} disabled={saving}>{saving?'Saving…':'Save Settings'}</button>
+          </div>
+
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:8}}>Accounts ({accounts.length})</div>
+            {accounts.map(a=>(
+              <div key={a.id} className="row-item">
+                <div className="row-left"><div style={{fontWeight:600}}>{a.name}</div><div style={{fontSize:12,color:'var(--muted)'}}>{a.type||'account'}</div></div>
+                <div style={{fontWeight:700}}>{fmt(a.balance||0)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {sub==='data'&&(
+        <div>
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:8}}>Export Your Data</div>
+            <div style={{fontSize:13,color:'var(--muted)',marginBottom:12}}>Download all your data as a JSON file. You can import it again anytime.</div>
+            <ExportBtn uid={uid} toast_={toast_}/>
+          </div>
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:8}}>Import Data</div>
+            <div style={{fontSize:13,color:'var(--muted)',marginBottom:12}}>⚠️ This will replace all your current data with the imported file.</div>
+            <div className="field">
+              <input type="file" accept=".json" onChange={e=>setImportFile(e.target.files[0])} style={{fontSize:14}}/>
+            </div>
+            {importFile&&<button className="btn btn-danger" onClick={doImport} disabled={importing}>{importing?'Importing…':'Import & Replace Data'}</button>}
+          </div>
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:4}}>Stats</div>
+            <div style={{fontSize:13,color:'var(--muted)'}}>
+              {data.transactions?.length||0} transactions · {data.categories?.length||0} categories · {data.debts?.length||0} debts · {data.savings_goals?.length||0} goals
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   BOTTOM NAV ICONS
+══════════════════════════════════════════════ */
+const NavIcons={
+  dash:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
+  income:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>,
+  budget:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 6v6l4 2"/></svg>,
+  debts:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>,
+  trends:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+  settings:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+};
+
+/* ══════════════════════════════════════════════
+   MAIN APP
+══════════════════════════════════════════════ */
+function App(){
+  const[user,setUser]=useState(undefined); // undefined=loading
+  const[data,setData]=useState(null);
+  const[loading,setLoading]=useState(false);
+  const[tab,setTab]=useState('dash');
+  const[showAdd,setShowAdd]=useState(false);
+  const[showIncome,setShowIncome]=useState(false);
+  const[showClaim,setShowClaim]=useState(false);
+  const[needsSetup,setNeedsSetup]=useState(false);
+  const{toast_,ToastContainer}=useToast();
+
+  // Auth listener
+  useEffect(()=>{
+    db.auth.getSession().then(({data:{session}})=>{
+      setUser(session?.user||null);
+    });
+    const{data:{subscription}}=db.auth.onAuthStateChange((_,session)=>{
+      setUser(session?.user||null);
+    });
+    return()=>subscription.unsubscribe();
+  },[]);
+
+  // Load data when user is known
+  useEffect(()=>{
+    if(user===undefined) return;
+    if(!user){setData(null);return;}
+    loadAll();
+  },[user]);
+
+  async function loadAll(){
+    if(!user) return;
+    setLoading(true);
+    try{
+      const ns=await D.needsSetup(user.id);
+      if(ns){setNeedsSetup(true);setLoading(false);return;}
+      setNeedsSetup(false);
+      const d=await D.getAll(user.id);
+      setData(d);
+      // Check legacy
+      const hasLeg=await D.hasLegacyData();
+      setShowClaim(hasLeg);
+    }catch(e){toast_('Failed to load data','error');}
+    setLoading(false);
+  }
+
+  async function handleLogout(){
+    await db.auth.signOut();
+    setData(null);
+    setUser(null);
+  }
+
+  // Loading spinner
+  if(user===undefined||loading){
+    return(
+      <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}}>
+        <div style={{fontSize:40}}>💰</div>
+        <div style={{color:'var(--muted)'}}>Loading…</div>
+      </div>
+    );
+  }
+
+  // Auth
+  if(!user) return<AuthScreen onAuth={u=>{setUser(u);loadAll();}}/>;
+
+  // Setup
+  if(needsSetup) return<SetupScreen uid={user.id} onDone={()=>{setNeedsSetup(false);loadAll();}}/>;
+
+  // No data yet
+  if(!data) return(
+    <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{color:'var(--muted)'}}>Loading your data…</div>
+    </div>
+  );
+
+  const qItems=data.quick_log_items||[];
+  const accounts=data.accounts||[];
+
+  return(
+    <div className="app-wrap">
+      <ToastContainer/>
+      {showAdd&&<AddModal uid={user.id} categories={data.categories||[]} accounts={accounts} quickLog={qItems} onSave={async()=>{setShowAdd(false);await loadAll();}} onClose={()=>setShowAdd(false)} toast_={toast_}/>}
+      {showIncome&&<IncomeModal uid={user.id} accounts={accounts} onSave={async()=>{setShowIncome(false);await loadAll();}} onClose={()=>setShowIncome(false)} toast_={toast_}/>}
+
+      <div className="main-scroll">
+        {/* Claim banner */}
+        {showClaim&&<ClaimBanner uid={user.id} onClaim={async()=>{setShowClaim(false);await loadAll();}} onDismiss={()=>setShowClaim(false)}/>}
+
+        {tab==='dash'&&<DashTab data={data} uid={user.id} onAdd={()=>setShowAdd(true)} onAddIncome={()=>setShowIncome(true)} toast_={toast_}/>}
+        {tab==='income'&&<IncomeTab data={data} uid={user.id} onAdd={()=>setShowIncome(true)} toast_={toast_} reload={loadAll}/>}
+        {tab==='budget'&&<BudgetTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
+        {tab==='debts'&&<DebtTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
+        {tab==='trends'&&<TrendsTab data={data}/>}
+        {tab==='settings'&&<SettingsTab data={data} uid={user.id} user={user} toast_={toast_} reload={loadAll} onLogout={handleLogout}/>}
+        {tab==='trans'&&<TransTab data={data} uid={user.id} onAdd={()=>setShowAdd(true)} toast_={toast_} reload={loadAll}/>}
+      </div>
+
+      {/* FAB */}
+      <button className="bnav-fab" onClick={()=>setShowAdd(true)} title="Log expense">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+
+      {/* Bottom Nav */}
+      <nav className="bnav">
+        {[
+          {id:'dash',label:'Home',icon:NavIcons.dash},
+          {id:'income',label:'Income',icon:NavIcons.income},
+          {id:'budget',label:'Budget',icon:NavIcons.budget},
+          {id:'debts',label:'Debts',icon:NavIcons.debts},
+          {id:'trends',label:'Trends',icon:NavIcons.trends},
+          {id:'settings',label:'More',icon:NavIcons.settings},
+        ].map(n=>(
+          <button key={n.id} className={`bnav-item${tab===n.id?' active':''}`} onClick={()=>setTab(n.id)}>
+            {n.icon}
+            {n.label}
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
