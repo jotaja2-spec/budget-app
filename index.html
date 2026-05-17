@@ -299,7 +299,7 @@ const D={
     await db.from('budget_targets').insert({id:crypto.randomUUID(),category:cat,monthly_amount:amt,user_id:uid});
   },
   async addTx(t,uid){
-    const{data,error}=await db.from('transactions').insert({...t,user_id:uid}).select().single();
+    const{data,error}=await db.from('transactions').insert({...t,id:crypto.randomUUID(),user_id:uid}).select().single();
     return{data,error};
   },
   async updateTx(id,changes){
