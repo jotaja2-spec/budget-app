@@ -247,13 +247,14 @@ const D={
     }
   },
   async needsSetup(uid){
-    const{data}=await db.from('categories').select('id').eq('user_id',uid).limit(1);
+    const{data}=await db.from('settings').select('id').eq('id','setup_complete').eq('user_id',uid).limit(1);
     return !data||data.length===0;
   },
   async fullSetup(uid){
     // categories
     const cats=DEF_CATS.map(c=>({...c,user_id:uid}));
-    await db.from('categories').insert(cats);
+    const catRes=await db.from('categories').insert(cats);
+    if(catRes.error) console.error('categories insert failed:',catRes.error);
     // quick log
     const ql=DEF_QL.map(q=>({name:q.label,category:q.category,default_amount:q.amount||null,account:q.account,user_id:uid}));
     await db.from('quick_log_items').insert(ql);
@@ -264,6 +265,8 @@ const D={
     // settings
     await D.setSetting('pay_frequency',DEF_FREQ,uid);
     await D.setSetting('pay_per_check','0',uid);
+    // Mark setup as complete — this is what needsSetup checks
+    await D.setSetting('setup_complete','true',uid);
   },
   async getSetting(key,uid,all){
     const rows=all||(await db.from('settings').select('*').or(`user_id.eq.${uid},user_id.is.null`)).data||[];
@@ -307,7 +310,7 @@ const D={
     return db.from('fixed_items').delete().eq('id',id);
   },
   async addIncomeEvent(ev,uid){
-    return db.from('income_events').insert({...ev,user_id:uid});
+    return db.from('income_events').insert({...ev,id:crypto.randomUUID(),user_id:uid});
   },
   async upsertGoal(g,uid){
     if(g.id){
@@ -348,6 +351,57 @@ const D={
     if(json.savings_goals?.length) await db.from('savings_goals').insert(strip(json.savings_goals));
   },
 };
+
+/* ── Auto Paycheck Logger ── */
+async function autoLogPaychecks(data,uid){
+  const settings=data.settings||[];
+  const incomeEvents=data.income_events||[];
+  const perCheck=parseFloat(settings.find(s=>(s.key||s.id)==='pay_per_check')?.value||0);
+  const freq=settings.find(s=>(s.key||s.id)==='pay_frequency')?.value||'semimonthly';
+  if(perCheck<=0) return false;
+
+  const todayStr=today();
+  const start=new Date();start.setMonth(start.getMonth()-3);
+
+  // Build list of expected pay dates
+  const payDates=[];
+  if(freq==='semimonthly'){
+    const cur=new Date(start.getFullYear(),start.getMonth(),1);
+    while(cur<=new Date()){
+      const y=cur.getFullYear(),m=String(cur.getMonth()+1).padStart(2,'0');
+      payDates.push(`${y}-${m}-01`,`${y}-${m}-15`);
+      cur.setMonth(cur.getMonth()+1);
+    }
+  }else if(freq==='monthly'){
+    const cur=new Date(start.getFullYear(),start.getMonth(),1);
+    while(cur<=new Date()){
+      const y=cur.getFullYear(),m=String(cur.getMonth()+1).padStart(2,'0');
+      payDates.push(`${y}-${m}-01`);
+      cur.setMonth(cur.getMonth()+1);
+    }
+  }else if(freq==='biweekly'){
+    const cur=new Date(start);
+    while(cur<=new Date()){payDates.push(cur.toISOString().slice(0,10));cur.setDate(cur.getDate()+14);}
+  }else if(freq==='weekly'){
+    const cur=new Date(start);
+    while(cur<=new Date()){payDates.push(cur.toISOString().slice(0,10));cur.setDate(cur.getDate()+7);}
+  }
+
+  // Filter to past dates not already logged (within ±1.5 days)
+  const toLog=payDates.filter(pd=>{
+    if(pd>todayStr) return false;
+    const pdMs=new Date(pd+'T12:00').getTime();
+    return !incomeEvents.some(e=>{
+      if(e.type!=='paycheck') return false;
+      return Math.abs(new Date(e.date+'T12:00').getTime()-pdMs)<=129600000;
+    });
+  });
+
+  for(const pd of toLog){
+    await D.addIncomeEvent({type:'paycheck',amount:perCheck,date:pd,account:'Checking',note:'Auto-logged'},uid);
+  }
+  return toLog.length>0;
+}
 
 /* ── Shared Components ── */
 function MCard({label,val,sub,color,small}){
@@ -482,6 +536,8 @@ function AuthScreen({onAuth}){
   const[mode,setMode]=useState('login');
   const[email,setEmail]=useState('');
   const[pass,setPass]=useState('');
+  const[showPass,setShowPass]=useState(false);
+  const[remember,setRemember]=useState(true);
   const[busy,setBusy]=useState(false);
   const[err,setErr]=useState('');
   const{toast_,ToastContainer}=useToast();
@@ -493,6 +549,10 @@ function AuthScreen({onAuth}){
       if(mode==='login'){
         const{data,error}=await db.auth.signInWithPassword({email,password:pass});
         if(error) throw error;
+        if(!remember){
+          // Set short session if not remembering
+          await db.auth.updateUser({});
+        }
         onAuth(data.user);
       }else{
         const{data,error}=await db.auth.signUp({email,password:pass});
@@ -520,8 +580,21 @@ function AuthScreen({onAuth}){
           </div>
           <div className="field">
             <label>Password</label>
-            <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" required autoComplete={mode==='login'?'current-password':'new-password'} minLength={6}/>
+            <div style={{position:'relative'}}>
+              <input type={showPass?'text':'password'} value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" required autoComplete={mode==='login'?'current-password':'new-password'} minLength={6} style={{paddingRight:44}}/>
+              <button type="button" onClick={()=>setShowPass(s=>!s)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'var(--muted)',cursor:'pointer',fontSize:18,padding:0}}>
+                {showPass?'🙈':'👁️'}
+              </button>
+            </div>
           </div>
+          {mode==='login'&&(
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16,cursor:'pointer'}} onClick={()=>setRemember(r=>!r)}>
+              <div style={{width:20,height:20,borderRadius:4,border:`2px solid ${remember?'var(--accent)':'var(--border)'}`,background:remember?'var(--accent)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .15s'}}>
+                {remember&&<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </div>
+              <span style={{fontSize:14,color:'var(--muted)',userSelect:'none'}}>Keep me signed in</span>
+            </div>
+          )}
           {err&&<div style={{color:'var(--red)',fontSize:13,marginBottom:12}}>{err}</div>}
           <button className="btn btn-primary" type="submit" disabled={busy}>
             {busy?'Please wait…':mode==='login'?'Sign In':'Create Account'}
@@ -1556,7 +1629,12 @@ function SettingsTab({data,uid,user,toast_,reload,onLogout}){
       {sub==='general'&&(
         <div>
           <div className="card">
-            <div style={{fontWeight:600,marginBottom:12}}>Pay Settings</div>
+            <div style={{fontWeight:600,marginBottom:4}}>💵 Auto Paycheck</div>
+            <div style={{fontSize:13,color:'var(--muted)',marginBottom:12}}>Your paycheck is auto-logged on every pay date. Update the amount here if your income changes.</div>
+            <div className="field">
+              <label>Take-home per paycheck</label>
+              <input type="number" value={perCheck} onChange={e=>setPerCheck(e.target.value)} placeholder="0.00" inputMode="decimal" style={{fontSize:22,fontWeight:700}}/>
+            </div>
             <div className="field">
               <label>Pay Frequency</label>
               <select value={payFreq} onChange={e=>setPayFreq(e.target.value)}>
@@ -1566,11 +1644,7 @@ function SettingsTab({data,uid,user,toast_,reload,onLogout}){
                 <option value="monthly">Monthly</option>
               </select>
             </div>
-            <div className="field">
-              <label>Typical take-home per paycheck</label>
-              <input type="number" value={perCheck} onChange={e=>setPerCheck(e.target.value)} placeholder="0" inputMode="decimal"/>
-            </div>
-            <button className="btn btn-primary" onClick={saveGeneral} disabled={saving}>{saving?'Saving…':'Save Settings'}</button>
+            <button className="btn btn-primary" onClick={saveGeneral} disabled={saving}>{saving?'Saving…':'Save'}</button>
           </div>
 
           <div className="card">
@@ -1663,7 +1737,10 @@ function App(){
       const ns=await D.needsSetup(user.id);
       if(ns){setNeedsSetup(true);setLoading(false);return;}
       setNeedsSetup(false);
-      const d=await D.getAll(user.id);
+      let d=await D.getAll(user.id);
+      // Auto-log any missed paychecks silently
+      const logged=await autoLogPaychecks(d,user.id);
+      if(logged) d=await D.getAll(user.id);
       setData(d);
       // Check legacy
       const hasLeg=await D.hasLegacyData();
@@ -1692,7 +1769,17 @@ function App(){
   if(!user) return<AuthScreen onAuth={u=>{setUser(u);loadAll();}}/>;
 
   // Setup
-  if(needsSetup) return<SetupScreen uid={user.id} onDone={()=>{setNeedsSetup(false);loadAll();}}/>;
+  if(needsSetup) return<SetupScreen uid={user.id} onDone={async()=>{
+    setNeedsSetup(false);
+    setLoading(true);
+    try{
+      const d=await D.getAll(user.id);
+      setData(d);
+      const hasLeg=await D.hasLegacyData();
+      setShowClaim(hasLeg);
+    }catch(e){toast_('Failed to load data','error');}
+    setLoading(false);
+  }}/>;
 
   // No data yet
   if(!data) return(
