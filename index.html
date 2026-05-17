@@ -797,7 +797,8 @@ function ClaimBanner({uid,onClaim,onDismiss}){
    ADD TRANSACTION MODAL
 ══════════════════════════════════════════════ */
 function AddModal({uid,categories,accounts,quickLog,onSave,onClose,toast_,prefill}){
-  const[mode,setMode]=useState('quick'); // quick | manual
+  const[mode,setMode]=useState('quick');
+  const[quickItem,setQuickItem]=useState(null); // selected quick item awaiting amount
   const[desc,setDesc]=useState(prefill?.description||'');
   const[amt,setAmt]=useState(prefill?.amount||'');
   const[cat,setCat]=useState(prefill?.category||categories[0]?.name||'');
@@ -810,25 +811,29 @@ function AddModal({uid,categories,accounts,quickLog,onSave,onClose,toast_,prefil
     if(!amt||isNaN(amt)){toast_('Enter a valid amount','error');return;}
     if(!desc){toast_('Enter a description','error');return;}
     setSaving(true);
-    const{error}=await D.addTx({
-      description:desc,amount:parseFloat(amt),category:cat,
-      account:acct,date,note,type:'expense'
-    },uid);
+    const{error}=await D.addTx({description:desc,amount:parseFloat(amt),category:cat,account:acct,date,note,type:'expense'},uid);
     if(error){toast_(error.message||'Save failed','error');}
     else{toast_('Logged!','success');onSave();}
     setSaving(false);
   }
 
-  async function quickSave(ql){
+  function selectQuick(ql){
+    setQuickItem(ql);
+    setAmt(ql.default_amount||ql.amount||'');
+  }
+
+  async function saveQuick(){
+    if(!amt||isNaN(amt)){toast_('Enter a valid amount','error');return;}
     setSaving(true);
     const{error}=await D.addTx({
-      description:ql.name||ql.label,
-      amount:parseFloat(ql.default_amount||ql.amount||0),
-      category:ql.category,account:ql.account||accounts[0]?.name||'Checking',
+      description:quickItem.name||quickItem.label,
+      amount:parseFloat(amt),
+      category:quickItem.category,
+      account:quickItem.account||accounts[0]?.name||'Checking',
       date:today(),note:'',type:'expense'
     },uid);
     if(error){toast_(error.message,'error');}
-    else{toast_(`Logged ${ql.name||ql.label}!`,'success');onSave();}
+    else{toast_(`Logged!`,'success');onSave();}
     setSaving(false);
   }
 
@@ -838,26 +843,48 @@ function AddModal({uid,categories,accounts,quickLog,onSave,onClose,toast_,prefil
         <div className="modal-handle"/>
         <div className="modal-title">Log Expense</div>
         <div className="tab-pills">
-          <button className={`tab-pill${mode==='quick'?' active':''}`} onClick={()=>setMode('quick')}>Quick</button>
-          <button className={`tab-pill${mode==='manual'?' active':''}`} onClick={()=>setMode('manual')}>Manual</button>
+          <button className={`tab-pill${mode==='quick'?' active':''}`} onClick={()=>{setMode('quick');setQuickItem(null);}}>Quick</button>
+          <button className={`tab-pill${mode==='manual'?' active':''}`} onClick={()=>{setMode('manual');setQuickItem(null);}}>Manual</button>
         </div>
-        {mode==='quick'&&(
+        {mode==='quick'&&!quickItem&&(
           <div>
             {quickLog.length===0&&<Empty h="No quick items" msg="Add quick-log items in Settings" icon="⚡"/>}
             {quickLog.map(ql=>(
-              <div key={ql.id||ql.name} className="row-item" style={{cursor:'pointer'}} onClick={()=>quickSave(ql)}>
+              <div key={ql.id||ql.name} className="row-item" style={{cursor:'pointer'}} onClick={()=>selectQuick(ql)}>
                 <div className="row-left">
                   <div style={{fontWeight:600}}>{ql.name||ql.label}</div>
-                  <div style={{fontSize:12,color:'var(--muted)'}}>{ql.category}</div>
+                  <div style={{fontSize:12,color:'var(--muted)'}}>{ql.category} · {ql.account||'Checking'}</div>
                 </div>
                 <div className="row-right">
-                  {ql.default_amount||ql.amount?<div style={{fontWeight:700}}>{fmt(ql.default_amount||ql.amount)}</div>:<div style={{color:'var(--muted)',fontSize:13}}>enter amount</div>}
-                  <div style={{color:'var(--accent)',fontSize:20}}>+</div>
+                  <div style={{color:'var(--muted)',fontSize:13}}>{ql.default_amount||ql.amount?fmt(ql.default_amount||ql.amount):'tap to log'}</div>
+                  <div style={{color:'var(--accent)',fontSize:20}}>›</div>
                 </div>
               </div>
             ))}
             <div style={{height:8}}/>
-            <button className="btn btn-ghost" onClick={()=>setMode('manual')}>Enter custom amount →</button>
+            <button className="btn btn-ghost" onClick={()=>setMode('manual')}>Enter custom →</button>
+          </div>
+        )}
+        {mode==='quick'&&quickItem&&(
+          <div>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,padding:'10px 12px',background:'var(--surface2)',borderRadius:8}}>
+              <button onClick={()=>setQuickItem(null)} style={{background:'none',border:'none',color:'var(--muted)',cursor:'pointer',fontSize:18,padding:0}}>‹</button>
+              <div>
+                <div style={{fontWeight:700}}>{quickItem.name||quickItem.label}</div>
+                <div style={{fontSize:12,color:'var(--muted)'}}>{quickItem.category} · {quickItem.account||'Checking'}</div>
+              </div>
+            </div>
+            <div className="field">
+              <label>How much was it?</label>
+              <input type="number" value={amt} onChange={e=>setAmt(e.target.value)}
+                placeholder="0.00" min="0" step="0.01" inputMode="decimal" autoFocus
+                style={{fontSize:28,fontWeight:700,textAlign:'center'}}/>
+            </div>
+            <div className="field">
+              <label>Date</label>
+              <input type="date" value={date} onChange={e=>setDate(e.target.value)}/>
+            </div>
+            <button className="btn btn-primary" onClick={saveQuick} disabled={saving||!amt}>{saving?'Saving…':'Log It'}</button>
           </div>
         )}
         {mode==='manual'&&(
@@ -1150,7 +1177,7 @@ function YearInReview({data}){
 /* ══════════════════════════════════════════════
    DASH TAB
 ══════════════════════════════════════════════ */
-function DashTab({data,uid,onAdd,onAddIncome,toast_}){
+function DashTab({data,uid,onAdd,onAddIncome,onTrans,toast_}){
   const{transactions=[],fixed_items=[],income_events=[],accounts=[],categories=[],settings=[],savings_goals=[]}=data;
 
   // Current month
@@ -1226,10 +1253,11 @@ function DashTab({data,uid,onAdd,onAddIncome,toast_}){
       </div>
 
       {/* Quick actions */}
-      <div style={{display:'flex',gap:8,marginBottom:16}}>
+      <div style={{display:'flex',gap:8,marginBottom:8}}>
         <button className="btn btn-primary" onClick={onAdd} style={{flex:1}}>+ Log Expense</button>
         <button className="btn btn-secondary" onClick={onAddIncome} style={{flex:1}}>+ Log Income</button>
       </div>
+      <button className="btn btn-ghost" onClick={onTrans} style={{marginBottom:16,width:'100%'}}>📋 View &amp; Edit Transactions</button>
 
       {/* Upcoming bills */}
       {upcoming.length>0&&(
@@ -2091,7 +2119,7 @@ function AccountRow({account,toast_,reload}){
   );
 }
 
-function SettingsTab({data,uid,user,toast_,reload,onLogout}){
+function SettingsTab({data,uid,user,toast_,reload,onLogout,onTrans}){
   const{settings=[],accounts=[],quick_log_items=[],categories=[]}=data;
   const[sub,setSub]=useState('general');
   const[payFreq,setPayFreq]=useState(settings.find(s=>(s.key||s.id)==='pay_frequency')?.value||'semimonthly');
@@ -2133,6 +2161,7 @@ function SettingsTab({data,uid,user,toast_,reload,onLogout}){
       </div>
       <NetWorthCard data={data}/>
 
+      <button className="btn btn-secondary" onClick={onTrans} style={{marginBottom:12,width:'100%'}}>📋 View &amp; Edit Transactions</button>
       <div className="tab-pills">
         <button className={`tab-pill${sub==='general'?' active':''}`} onClick={()=>setSub('general')}>General</button>
         <button className={`tab-pill${sub==='data'?' active':''}`} onClick={()=>setSub('data')}>Data</button>
@@ -2317,12 +2346,12 @@ function App(){
         {/* Claim banner */}
         {showClaim&&<ClaimBanner uid={user.id} onClaim={async()=>{setShowClaim(false);await loadAll();}} onDismiss={()=>setShowClaim(false)}/>}
 
-        {tab==='dash'&&<DashTab data={data} uid={user.id} onAdd={()=>setShowAdd(true)} onAddIncome={()=>setShowIncome(true)} toast_={toast_}/>}
+        {tab==='dash'&&<DashTab data={data} uid={user.id} onAdd={()=>setShowAdd(true)} onAddIncome={()=>setShowIncome(true)} onTrans={()=>setTab('trans')} toast_={toast_}/>}
         {tab==='income'&&<IncomeTab data={data} uid={user.id} onAdd={()=>setShowIncome(true)} toast_={toast_} reload={loadAll}/>}
         {tab==='budget'&&<BudgetTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
         {tab==='debts'&&<DebtTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
         {tab==='trends'&&<TrendsTab data={data}/>}
-        {tab==='settings'&&<SettingsTab data={data} uid={user.id} user={user} toast_={toast_} reload={loadAll} onLogout={handleLogout}/>}
+        {tab==='settings'&&<SettingsTab data={data} uid={user.id} user={user} toast_={toast_} reload={loadAll} onLogout={handleLogout} onTrans={()=>setTab('trans')}/>}
         {tab==='trans'&&<TransTab data={data} uid={user.id} onAdd={()=>setShowAdd(true)} toast_={toast_} reload={loadAll}/>}
       </div>
 
