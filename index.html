@@ -17,7 +17,7 @@
   --red:#ff5c6b;--amber:#ffb84d;--green:#4ade80;--blue:#38bdf8;
   --radius:14px;--radius-sm:8px;--nav-h:64px;--safe-b:env(safe-area-inset-bottom,0px);
 }
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:16px;overscroll-behavior:none}
 #root{height:100%;display:flex;flex-direction:column}
 .app-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;max-width:600px;margin:0 auto;width:100%}
@@ -27,8 +27,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .bnav-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 6px;border:none;background:none;color:var(--muted);cursor:pointer;font-size:9px;font-weight:500;transition:color .15s;min-width:0;flex:1}
 .bnav-item.active{color:var(--accent)}
 .bnav-item svg{width:22px;height:22px}
-.bnav-fab{position:fixed;bottom:calc(var(--nav-h) + var(--safe-b) + 12px);right:max(16px,calc(50% - 284px));width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(108,99,255,.5);z-index:101;transition:transform .15s}
-.bnav-fab:active{transform:scale(.93)}
+.bnav-fab{position:fixed;bottom:calc(var(--nav-h) + var(--safe-b) + 16px);right:max(20px,calc(50% - 280px));width:60px;height:60px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 24px rgba(108,99,255,.6);z-index:200;transition:transform .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.bnav-fab:active{transform:scale(.92)}
 /* Cards */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
 .card-sm{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px}
