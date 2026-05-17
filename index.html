@@ -498,28 +498,47 @@ function DonutChart({segments,size=120,thick=18,center}){
     </div>
   );
 }
-function SVGBarChart({data,height=120,color='#6c63ff',showAmounts}){
+function SVGBarChart({data,height=120,color='#6c63ff',showAmounts,incomeLine}){
   if(!data||!data.length) return null;
-  const max=Math.max(...data.map(d=>d.value||0))||1;
-  const w=300,bw=Math.min(28,(w/data.length)-4);
-  const bottomPad=showAmounts?30:16;
+  const n=data.length;
+  const allVals=[...data.map(d=>d.value||0),...(incomeLine||[]).map(v=>v||0)];
+  const max=Math.max(...allVals)||1;
+  const w=300,pad=4;
+  const colW=(w-(pad*(n+1)))/n;
+  const bottomPad=showAmounts?28:14;
+  const topPad=16;
+  const chartH=height-bottomPad-topPad;
+
+  // Income line points
+  const linePoints=incomeLine?incomeLine.map((v,i)=>{
+    const cx=pad+(i*colW)+(i*pad)+colW/2;
+    const y=topPad+chartH*(1-(v||0)/max);
+    return[cx,y];
+  }):[];
+  const linePath=linePoints.length>1?'M'+linePoints.map(p=>p.join(',')).join(' L'):'';
+
   return(
-    <svg viewBox={`0 0 ${w} ${height}`} style={{width:'100%',height}}>
+    <svg viewBox={`0 0 ${w} ${height}`} style={{width:'100%',height:'auto'}}>
       {data.map((d,i)=>{
-        const x=i*(w/data.length)+(w/data.length-bw)/2;
-        const bh=Math.max(2,((d.value||0)/max)*(height-bottomPad-8));
-        const y=height-bh-bottomPad;
-        const cx=i*(w/data.length)+(w/data.length)/2;
+        const x=pad+(i*colW)+(i*pad);
+        const cx=x+colW/2;
+        const bh=Math.max(2,((d.value||0)/max)*chartH);
+        const y=topPad+chartH-bh;
+        const amt=d.value>=1000?`${(d.value/1000).toFixed(1)}k`:Math.round(d.value);
         return(
           <g key={i}>
-            <rect x={x} y={y} width={bw} height={bh} rx={4} fill={d.color||color}/>
+            <rect x={x} y={y} width={colW} height={bh} rx={3} fill={d.color||color} opacity={0.85}/>
             <text x={cx} y={height-bottomPad+11} textAnchor="middle" fill="var(--muted)" fontSize="9">{d.label}</text>
-            {showAmounts&&d.value>0&&<text x={cx} y={height-2} textAnchor="middle" fill="var(--text)" fontSize="8" fontWeight="700">
-              {d.value>=1000?`${(d.value/1000).toFixed(1)}k`:Math.round(d.value)}
-            </text>}
+            {showAmounts&&d.value>0&&<text x={cx} y={height-2} textAnchor="middle" fill="var(--text)" fontSize="8.5" fontWeight="700">{amt}</text>}
           </g>
         );
       })}
+      {linePath&&<>
+        <path d={linePath} fill="none" stroke="rgba(0,212,170,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        {linePoints.map(([cx,y],i)=>(
+          <circle key={i} cx={cx} cy={y} r="3.5" fill="var(--bg)" stroke="rgba(0,212,170,1)" strokeWidth="2"/>
+        ))}
+      </>}
     </svg>
   );
 }
@@ -1662,8 +1681,21 @@ function TrendsTab({data}){
       </div>
 
       <div className="card">
-        <div className="section-title">Spending — Last 6 Months</div>
-        <SVGBarChart data={months6.map(m=>({label:m.label,value:m.spend,color:'var(--accent)',amount:m.spend}))} height={110} showAmounts/>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <div className="section-title" style={{margin:0}}>Spending — Last 6 Months</div>
+          <div style={{display:'flex',gap:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'var(--muted)'}}>
+              <div style={{width:10,height:10,borderRadius:2,background:'var(--accent)',opacity:.85}}/> Spending
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'var(--muted)'}}>
+              <div style={{width:16,height:2,background:'var(--accent2)',borderRadius:1}}/> Income
+            </div>
+          </div>
+        </div>
+        <SVGBarChart
+        data={months6.map(m=>({label:m.label,value:m.spend,color:'var(--accent)'}))}
+        incomeLine={months6.map(m=>m.income)}
+        height={130} showAmounts/>
       </div>
 
       <div className="card">
