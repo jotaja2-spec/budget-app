@@ -2152,8 +2152,13 @@ function AccountRow({account,toast_,reload}){
         </select>
       </div>
       <div style={{display:'flex',gap:8}}>
-        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving} style={{flex:1}}>{saving?'Saving…':'Save'}</button>
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving} style={{flex:2}}>{saving?'Saving…':'Save'}</button>
         <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(false)}>Cancel</button>
+        <button className="btn btn-danger btn-sm" onClick={async()=>{
+          if(!window.confirm(`Delete ${account.name}?`)) return;
+          await db.from('accounts').delete().eq('id',account.id);
+          await reload();
+        }}>Delete</button>
       </div>
     </div>
   );
