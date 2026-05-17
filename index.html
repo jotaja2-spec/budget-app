@@ -827,7 +827,7 @@ function AddModal({uid,categories,accounts,quickLog,onSave,onClose,toast_,prefil
     if(!amt||isNaN(amt)){toast_('Enter a valid amount','error');return;}
     if(!desc){toast_('Enter a description','error');return;}
     setSaving(true);
-    const{error}=await D.addTx({description:desc,amount:parseFloat(amt),category:cat,account:acct,date,note,type:'expense'},uid);
+    const{error}=await D.addTx({description:desc,amount:parseFloat(amt),category:cat,account:acct,date,note},uid);
     if(error){toast_(error.message||'Save failed','error');}
     else{toast_('Logged!','success');onSave();}
     setSaving(false);
@@ -846,7 +846,7 @@ function AddModal({uid,categories,accounts,quickLog,onSave,onClose,toast_,prefil
       amount:parseFloat(amt),
       category:quickItem.category,
       account:quickItem.account||accounts[0]?.name||'Checking',
-      date:today(),note:'',type:'expense'
+      date:today(),note:''
     },uid);
     if(error){toast_(error.message,'error');}
     else{toast_(`Logged!`,'success');onSave();}
