@@ -1433,14 +1433,24 @@ function DebtCard({debt,uid,toast_,reload}){
           {debt.current_balance<=0?'✅ Paid off':fmt(debt.current_balance)}
         </div>
       </div>
-      <div style={{fontSize:12,color:'var(--muted)',marginBottom:6}}>{debt.interest_rate||0}% APR · {fmt(debt.monthly_payment)}/mo</div>
+      <div style={{fontSize:12,color:'var(--muted)',marginBottom:6}}>
+        {debt.interest_rate>0?`${debt.interest_rate}% APR`:'0% interest'}
+        {' · '}{fmt(debt.monthly_payment)}/mo
+      </div>
+      {debt.promo_end&&(()=>{
+        const promoDate=new Date(debt.promo_end);
+        const daysLeft=Math.ceil((promoDate-new Date())/(1000*60*60*24));
+        const color=daysLeft<60?'var(--red)':daysLeft<180?'var(--amber)':'var(--accent2)';
+        const label=daysLeft<0?'⚠️ Promo expired!':daysLeft<60?`⚠️ Promo ends in ${daysLeft} days!`:daysLeft<180?`⏰ Promo ends ${promoDate.toLocaleDateString('en-US',{month:'short',year:'numeric'})}` :`✅ 0% until ${promoDate.toLocaleDateString('en-US',{month:'short',year:'numeric'})}`;
+        return<div style={{fontSize:12,fontWeight:600,color,marginBottom:6,padding:'4px 8px',background:`${color}18`,borderRadius:6,display:'inline-block'}}>{label}</div>;
+      })()}
       <ProgBar pct={pct} color={debt.color||'var(--accent)'}/>
       <div style={{display:'flex',justifyContent:'space-between',marginTop:4,marginBottom:4}}>
         <span style={{fontSize:11,color:'var(--muted)'}}>{pct}% paid off</span>
         {payoff&&<span style={{fontSize:11,color:'var(--accent)',fontWeight:600}}>
-          🏁 Paid off {payoff.date.toLocaleDateString('en-US',{month:'short',year:'numeric'})} · {payoff.months} mo
+          🏁 {payoff.date.toLocaleDateString('en-US',{month:'short',year:'numeric'})} · {payoff.months} mo
         </span>}
-        {!payoff&&debt.current_balance>0&&<span style={{fontSize:11,color:'var(--muted)'}}>Set monthly payment to see payoff date</span>}
+        {!payoff&&debt.current_balance>0&&debt.monthly_payment>0&&<span style={{fontSize:11,color:'var(--muted)'}}>Add interest rate to see payoff date</span>}
       </div>
 
       {paying&&(
