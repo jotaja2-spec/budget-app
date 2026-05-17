@@ -498,20 +498,25 @@ function DonutChart({segments,size=120,thick=18,center}){
     </div>
   );
 }
-function SVGBarChart({data,height=120,color='#6c63ff'}){
+function SVGBarChart({data,height=120,color='#6c63ff',showAmounts}){
   if(!data||!data.length) return null;
   const max=Math.max(...data.map(d=>d.value||0))||1;
   const w=300,bw=Math.min(28,(w/data.length)-4);
+  const bottomPad=showAmounts?30:16;
   return(
     <svg viewBox={`0 0 ${w} ${height}`} style={{width:'100%',height}}>
       {data.map((d,i)=>{
         const x=i*(w/data.length)+(w/data.length-bw)/2;
-        const bh=Math.max(2,((d.value||0)/max)*(height-24));
-        const y=height-bh-16;
+        const bh=Math.max(2,((d.value||0)/max)*(height-bottomPad-8));
+        const y=height-bh-bottomPad;
+        const cx=i*(w/data.length)+(w/data.length)/2;
         return(
           <g key={i}>
             <rect x={x} y={y} width={bw} height={bh} rx={4} fill={d.color||color}/>
-            <text x={x+bw/2} y={height-2} textAnchor="middle" fill="var(--muted)" fontSize="9">{d.label}</text>
+            <text x={cx} y={height-bottomPad+11} textAnchor="middle" fill="var(--muted)" fontSize="9">{d.label}</text>
+            {showAmounts&&d.value>0&&<text x={cx} y={height-2} textAnchor="middle" fill="var(--text)" fontSize="8" fontWeight="700">
+              {d.value>=1000?`${(d.value/1000).toFixed(1)}k`:Math.round(d.value)}
+            </text>}
           </g>
         );
       })}
@@ -1658,14 +1663,7 @@ function TrendsTab({data}){
 
       <div className="card">
         <div className="section-title">Spending — Last 6 Months</div>
-        <SVGBarChart data={months6.map(m=>({label:m.label,value:m.spend,color:'var(--accent)'}))} height={100}/>
-        <div style={{display:'flex',justifyContent:'space-between',marginTop:8}}>
-          {months6.map((m,i)=>(
-            <div key={i} style={{textAlign:'center',flex:1}}>
-              <div style={{fontSize:11,fontWeight:700}}>{fmt(m.spend).replace('$','')}</div>
-            </div>
-          ))}
-        </div>
+        <SVGBarChart data={months6.map(m=>({label:m.label,value:m.spend,color:'var(--accent)',amount:m.spend}))} height={110} showAmounts/>
       </div>
 
       <div className="card">
@@ -1954,10 +1952,10 @@ function App(){
       <nav className="bnav">
         {[
           {id:'dash',label:'Home',icon:NavIcons.dash},
-          {id:'income',label:'Income',icon:NavIcons.income},
           {id:'budget',label:'Budget',icon:NavIcons.budget},
           {id:'debts',label:'Debts',icon:NavIcons.debts},
           {id:'trends',label:'Trends',icon:NavIcons.trends},
+          {id:'income',label:'Income',icon:NavIcons.income},
           {id:'settings',label:'More',icon:NavIcons.settings},
         ].map(n=>(
           <button key={n.id} className={`bnav-item${tab===n.id?' active':''}`} onClick={()=>setTab(n.id)}>
