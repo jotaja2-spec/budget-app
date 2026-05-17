@@ -2471,7 +2471,12 @@ function AccountRow({account,toast_,reload}){
 
   async function save(){
     setSaving(true);
+    const oldName=account.name;
     await D.updateAccount(account.id,{balance:parseFloat(bal)||0,name,type});
+    // If name changed, update all transactions referencing the old name
+    if(name!==oldName){
+      await db.from('transactions').update({account:name}).eq('account',oldName).eq('user_id',account.user_id);
+    }
     toast_('Saved','success');
     setEditing(false);
     await reload();
@@ -2484,7 +2489,7 @@ function AccountRow({account,toast_,reload}){
     <div style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
         <div className="field" style={{marginBottom:0}}>
-          <label>Name</label>
+          <label>Name {name!==account.name&&<span style={{fontSize:10,color:'var(--accent2)'}}>· updates all transactions</span>}</label>
           <input value={name} onChange={e=>setName(e.target.value)}/>
         </div>
         <div className="field" style={{marginBottom:0}}>
