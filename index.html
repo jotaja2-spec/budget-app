@@ -1106,9 +1106,22 @@ function NetWorthCard({data}){
 
 /* ── Recurring Charges ── */
 function RecurringSection({data}){
-  const{transactions=[]}=data;
+  const{transactions=[],fixed_items=[]}=data;
   const[expanded,setExpanded]=useState(false);
-  const recurring=useMemo(()=>findRecurring(transactions),[transactions]);
+
+  // Normalize a string for fuzzy matching
+  const norm=s=>s.toUpperCase().replace(/[^A-Z0-9]/g,'');
+
+  const allRecurring=useMemo(()=>findRecurring(transactions),[transactions]);
+
+  // Filter out anything already in fixed_items (fuzzy name match)
+  const recurring=useMemo(()=>{
+    const fixedNames=fixed_items.map(f=>norm(f.name));
+    return allRecurring.filter(r=>{
+      const rn=norm(r.desc);
+      return !fixedNames.some(fn=>fn.length>2&&(rn.includes(fn)||fn.includes(rn)));
+    });
+  },[allRecurring,fixed_items]);
   if(!recurring.length) return null;
   const shown=expanded?recurring:recurring.slice(0,5);
   const totalMonthly=recurring.reduce((s,r)=>s+r.amount,0);
