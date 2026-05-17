@@ -1374,22 +1374,72 @@ function DebtTab({data,uid,toast_,reload}){
 
 function DebtCard({debt,uid,toast_,reload}){
   const[editing,setEditing]=useState(false);
+  const[paying,setPaying]=useState(false);
+  const[payAmt,setPayAmt]=useState('');
+  const[logTx,setLogTx]=useState(true);
+  const[savingPay,setSavingPay]=useState(false);
   const pct=debt.original_balance?Math.round(((debt.original_balance-debt.current_balance)/debt.original_balance)*100):0;
+
   async function del(){
     await D.deleteDebt(debt.id);
     toast_('Removed','success');
     await reload();
   }
+
+  async function submitPayment(){
+    const amt=parseFloat(payAmt);
+    if(!amt||amt<=0){toast_('Enter a valid amount','error');return;}
+    setSavingPay(true);
+    const newBal=Math.max(0,parseFloat(debt.current_balance)-amt);
+    await D.updateDebt(debt.id,{current_balance:newBal});
+    if(logTx){
+      await D.addTx({
+        description:`Payment — ${debt.name}`,
+        amount:amt,date:today(),
+        category:'Other',account:'Checking',
+        note:'Debt payment'
+      },uid);
+    }
+    toast_(`Payment logged! Balance now ${fmt(newBal)}`,'success');
+    setPaying(false);setPayAmt('');
+    await reload();
+    setSavingPay(false);
+  }
+
   if(editing) return<DebtForm uid={uid} item={debt} onSave={async()=>{setEditing(false);await reload();}} onCancel={()=>setEditing(false)} toast_={toast_}/>;
   return(
     <div className="card" style={{marginBottom:10}}>
       <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
         <div style={{fontWeight:700,fontSize:16}}>{debt.name}</div>
-        <div style={{fontWeight:800,fontSize:17,color:'var(--red)'}}>{fmt(debt.current_balance)}</div>
+        <div style={{fontWeight:800,fontSize:17,color:debt.current_balance<=0?'var(--green)':'var(--red)'}}>
+          {debt.current_balance<=0?'✅ Paid off':fmt(debt.current_balance)}
+        </div>
       </div>
       <div style={{fontSize:12,color:'var(--muted)',marginBottom:8}}>{debt.interest_rate||0}% APR · {fmt(debt.monthly_payment)}/mo</div>
       {debt.original_balance>0&&<ProgBar pct={pct} color={debt.color||'var(--accent)'}/>}
+
+      {paying&&(
+        <div style={{marginTop:12,padding:12,background:'var(--bg)',borderRadius:8,border:'1px solid var(--border)'}}>
+          <div style={{fontWeight:600,marginBottom:8}}>Log a Payment</div>
+          <input type="number" value={payAmt} onChange={e=>setPayAmt(e.target.value)}
+            placeholder={`Suggested: ${fmt(debt.monthly_payment)}`}
+            inputMode="decimal" autoFocus
+            style={{width:'100%',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,padding:'10px 12px',color:'var(--text)',fontSize:16,marginBottom:8}}/>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,cursor:'pointer'}} onClick={()=>setLogTx(v=>!v)}>
+            <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${logTx?'var(--accent)':'var(--border)'}`,background:logTx?'var(--accent)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              {logTx&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><polyline points="1,5 4,8 9,2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </div>
+            <span style={{fontSize:13,color:'var(--muted)',userSelect:'none'}}>Also log as a transaction</span>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-primary btn-sm" onClick={submitPayment} disabled={savingPay} style={{flex:1}}>{savingPay?'Saving…':'Log Payment'}</button>
+            <button className="btn btn-ghost btn-sm" onClick={()=>{setPaying(false);setPayAmt('');}}>Cancel</button>
+          </div>
+        </div>
+      )}
+
       <div style={{display:'flex',gap:8,marginTop:8}}>
+        {debt.current_balance>0&&<button className="btn btn-primary btn-sm" onClick={()=>setPaying(p=>!p)} style={{flex:1}}>💳 Log Payment</button>}
         <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>Edit</button>
         <button className="btn btn-danger btn-sm" onClick={del}>Remove</button>
       </div>
