@@ -833,9 +833,11 @@ function AddModal({uid,categories,accounts,quickLog,onSave,onClose,toast_,prefil
     setSaving(false);
   }
 
+  const[quickCat,setQuickCat]=useState('');
   function selectQuick(ql){
     setQuickItem(ql);
     setAmt(ql.default_amount||ql.amount||'');
+    setQuickCat(ql.category||categories[0]?.name||'');
   }
 
   async function saveQuick(){
@@ -844,7 +846,7 @@ function AddModal({uid,categories,accounts,quickLog,onSave,onClose,toast_,prefil
     const{error}=await D.addTx({
       description:quickItem.name||quickItem.label,
       amount:parseFloat(amt),
-      category:quickItem.category,
+      category:quickCat||quickItem.category,
       account:quickItem.account||accounts[0]?.name||'Checking',
       date:today(),note:''
     },uid);
@@ -895,6 +897,12 @@ function AddModal({uid,categories,accounts,quickLog,onSave,onClose,toast_,prefil
               <input type="number" value={amt} onChange={e=>setAmt(e.target.value)}
                 placeholder="0.00" min="0" step="0.01" inputMode="decimal" autoFocus
                 style={{fontSize:28,fontWeight:700,textAlign:'center'}}/>
+            </div>
+            <div className="field">
+              <label>Category</label>
+              <select value={quickCat} onChange={e=>setQuickCat(e.target.value)}>
+                {categories.map(c=><option key={c.id||c.name} value={c.name}>{c.emoji} {c.name}</option>)}
+              </select>
             </div>
             <div className="field">
               <label>Date</label>
