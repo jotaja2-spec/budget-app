@@ -387,13 +387,16 @@ async function autoLogPaychecks(data,uid){
     while(cur<=new Date()){payDates.push(cur.toISOString().slice(0,10));cur.setDate(cur.getDate()+7);}
   }
 
-  // Filter to past dates not already logged (within ±1.5 days)
+  // Only auto-log if user has no income history at all (new setup)
+  if(incomeEvents.length>0) return false;
+
+  // Filter to past dates not already logged (within ±4 days)
   const toLog=payDates.filter(pd=>{
     if(pd>todayStr) return false;
     const pdMs=new Date(pd+'T12:00').getTime();
     return !incomeEvents.some(e=>{
       if(e.type!=='paycheck') return false;
-      return Math.abs(new Date(e.date+'T12:00').getTime()-pdMs)<=129600000;
+      return Math.abs(new Date(e.date+'T12:00').getTime()-pdMs)<=345600000;
     });
   });
 
