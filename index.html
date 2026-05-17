@@ -1399,9 +1399,12 @@ function DebtTab({data,uid,toast_,reload}){
           {timeline.length===0&&<Empty h="No payoff timeline" msg="Add debts with balances and monthly payments to see your payoff order." icon="📅"/>}
           {timeline.length>0&&(
             <>
-              <div className="sbanner blue" style={{marginBottom:12}}>
+              <div className="sbanner blue" style={{marginBottom:8}}>
                 <span style={{fontSize:20}}>🏁</span>
                 <span>Debt-free by ~{timeline[timeline.length-1].date?new Date(timeline[timeline.length-1].date+'T12:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'calculating…'}</span>
+              </div>
+              <div style={{fontSize:12,color:'var(--muted)',marginBottom:12,paddingLeft:4}}>
+                ❄️ Snowball method — each payoff rolls freed cash onto the next debt. Individual debt cards show standalone payoff dates without this boost.
               </div>
               {timeline.map((ev,i)=>(
                 <div key={i} style={{display:'flex',gap:12,marginBottom:16}}>
@@ -1487,7 +1490,7 @@ function DebtCard({debt,uid,toast_,reload}){
       <div style={{display:'flex',justifyContent:'space-between',marginTop:4,marginBottom:4}}>
         <span style={{fontSize:11,color:'var(--muted)'}}>{pct}% paid off</span>
         {payoff&&<span style={{fontSize:11,color:'var(--accent)',fontWeight:600}}>
-          🏁 {payoff.date.toLocaleDateString('en-US',{month:'short',year:'numeric'})} · {payoff.months} mo
+          🏁 {payoff.date.toLocaleDateString('en-US',{month:'short',year:'numeric'})} · {payoff.months<12?`${payoff.months}mo`:payoff.months%12>0?`${Math.floor(payoff.months/12)}yr ${payoff.months%12}mo`:`${Math.floor(payoff.months/12)}yr`} alone
         </span>}
         {!payoff&&debt.current_balance>0&&debt.monthly_payment>0&&<span style={{fontSize:11,color:'var(--muted)'}}>Add interest rate to see payoff date</span>}
       </div>
