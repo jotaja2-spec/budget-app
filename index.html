@@ -397,10 +397,8 @@ function calcCashFlow(data){
 
 function calcNetWorth(data){
   const{accounts=[],debts=[]}=data;
-  const assets=accounts.filter(a=>a.type!=='credit').reduce((s,a)=>s+parseFloat(a.balance||0),0);
-  const ccDebt=accounts.filter(a=>a.type==='credit').reduce((s,a)=>s+parseFloat(a.balance||0),0);
-  const debtLiabilities=debts.filter(d=>d.current_balance>0).reduce((s,d)=>s+parseFloat(d.current_balance||0),0);
-  const liabilities=ccDebt+debtLiabilities;
+  const assets=accounts.reduce((s,a)=>s+parseFloat(a.balance||0),0);
+  const liabilities=debts.filter(d=>d.current_balance>0).reduce((s,d)=>s+parseFloat(d.current_balance||0),0);
   return{assets,liabilities,netWorth:assets-liabilities};
 }
 
@@ -2129,7 +2127,6 @@ function AccountRow({account,toast_,reload}){
         <select value={type} onChange={e=>setType(e.target.value)}>
           <option value="checking">Checking</option>
           <option value="savings">Savings</option>
-          <option value="credit">Credit Card</option>
           <option value="investment">Investment (Robinhood, etc.)</option>
           <option value="retirement">Retirement (401k, IRA)</option>
           <option value="hsa">HSA</option>
