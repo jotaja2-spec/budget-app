@@ -224,6 +224,7 @@ function calcPayoffTimeline(debts){
     const freed=debt.pmt;
     events.push({
       date:dt.toISOString().slice(0,10),
+      months,
       event:`${debt.name} paid off`,
       sub:`Frees up ${fmt(freed)}/mo`,
       color:debt.color||'#6c63ff',
@@ -1331,7 +1332,7 @@ function FixedItemForm({uid,item,onSave,onCancel,toast_}){
 ══════════════════════════════════════════════ */
 function DebtTab({data,uid,toast_,reload}){
   const{debts=[],savings_goals=[]}=data;
-  const[sub,setSub]=useState('debts');
+  const[sub,setSub]=useState('all');
   const[adding,setAdding]=useState(false);
   const[editDebt,setEditDebt]=useState(null);
   const[editGoal,setEditGoal]=useState(null);
@@ -1345,37 +1346,47 @@ function DebtTab({data,uid,toast_,reload}){
   const totalSaved=activeGoals.reduce((s,g)=>s+parseFloat(g.current_amount||0),0);
   const totalGoal=activeGoals.reduce((s,g)=>s+parseFloat(g.target_amount||0),0);
 
+  function fmtMonths(m){
+    if(!m) return '';
+    if(m<12) return `${m}mo`;
+    const y=Math.floor(m/12),mo=m%12;
+    return mo>0?`${y}yr ${mo}mo`:`${y}yr`;
+  }
+
   return(
     <div>
       <div className="tab-pills">
-        <button className={`tab-pill${sub==='debts'?' active':''}`} onClick={()=>setSub('debts')}>Debts</button>
-        <button className={`tab-pill${sub==='goals'?' active':''}`} onClick={()=>setSub('goals')}>Goals</button>
+        <button className={`tab-pill${sub==='all'?' active':''}`} onClick={()=>setSub('all')}>Overview</button>
         <button className={`tab-pill${sub==='timeline'?' active':''}`} onClick={()=>setSub('timeline')}>Timeline</button>
       </div>
 
-      {sub==='debts'&&(
+      {sub==='all'&&(
         <div>
+          {/* Debts section */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <div className="section-title" style={{margin:0}}>💳 Debts</div>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setAdding(true)}>+ Add</button>
+          </div>
           <div className="grid2" style={{marginBottom:12}}>
             <MCard label="Total Debt" val={fmt(totalDebt)} color="var(--red)"/>
             <MCard label="Monthly Payments" val={fmt(totalMonthly)} sub="combined"/>
           </div>
-          <button className="btn btn-secondary" onClick={()=>setAdding(true)} style={{marginBottom:12}}>+ Add Debt</button>
           {debts.length===0&&<Empty h="No debts" msg="Add loans, credit cards, and other debts to track payoff." icon="💳"/>}
           {debts.map(d=>(
             <DebtCard key={d.id} debt={d} uid={uid} toast_={toast_} reload={reload}/>
           ))}
           {adding&&<DebtForm uid={uid} onSave={async()=>{setAdding(false);await reload();}} onCancel={()=>setAdding(false)} toast_={toast_}/>}
-        </div>
-      )}
 
-      {sub==='goals'&&(
-        <div>
+          {/* Goals section */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',margin:'20px 0 8px'}}>
+            <div className="section-title" style={{margin:0}}>🎯 Savings Goals</div>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setAddGoal(true)}>+ Add</button>
+          </div>
           <div className="grid2" style={{marginBottom:12}}>
             <MCard label="Total Saved" val={fmt(totalSaved)} color="var(--accent2)"/>
             <MCard label="Total Goal" val={fmt(totalGoal)}/>
           </div>
-          <button className="btn btn-secondary" onClick={()=>setAddGoal(true)} style={{marginBottom:12}}>+ Add Goal</button>
-          {activeGoals.length===0&&<Empty h="No goals yet" msg="Create a savings goal like a vacation, emergency fund, or car." icon="🎯"/>}
+          {activeGoals.length===0&&<Empty h="No goals yet" msg="Create a savings goal like a vacation or emergency fund." icon="🎯"/>}
           {activeGoals.map(g=>(
             <GoalCard key={g.id} goal={g} uid={uid} toast_={toast_} reload={reload}/>
           ))}
@@ -1390,7 +1401,7 @@ function DebtTab({data,uid,toast_,reload}){
             <>
               <div className="sbanner blue" style={{marginBottom:12}}>
                 <span style={{fontSize:20}}>🏁</span>
-                <span>Debt-free by ~{monthLabel(timeline[timeline.length-1].date+'-01')}</span>
+                <span>Debt-free by ~{timeline[timeline.length-1].date?new Date(timeline[timeline.length-1].date+'T12:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):'calculating…'}</span>
               </div>
               {timeline.map((ev,i)=>(
                 <div key={i} style={{display:'flex',gap:12,marginBottom:16}}>
@@ -1400,7 +1411,11 @@ function DebtTab({data,uid,toast_,reload}){
                   </div>
                   <div style={{flex:1,paddingBottom:12}}>
                     <div style={{fontWeight:700,fontSize:15}}>{ev.event}</div>
-                    <div style={{fontSize:12,color:'var(--muted)'}}>{monthLabel(ev.date+'-01')} · {ev.sub}</div>
+                    <div style={{fontSize:12,color:'var(--muted)'}}>
+                      {ev.date?new Date(ev.date+'T12:00').toLocaleDateString('en-US',{month:'short',year:'numeric'}):''}
+                      {ev.months?` · ${fmtMonths(ev.months)} remaining`:''}
+                      {' · '}{ev.sub}
+                    </div>
                   </div>
                 </div>
               ))}
