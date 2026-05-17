@@ -2451,7 +2451,15 @@ function PlaidSection({uid,session,toast_,reload,data}){
               <div style={{fontWeight:600}}>{item.institution_name}</div>
               <div style={{fontSize:12,color:'var(--muted)'}}>{item.last_synced_at?`Last synced ${new Date(item.last_synced_at).toLocaleDateString()}`:'Never synced'}</div>
             </div>
-            <div style={{color:'var(--green)',fontSize:12,fontWeight:600}}>✓ Connected</div>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <div style={{color:'var(--green)',fontSize:12,fontWeight:600}}>✓</div>
+              <button className="btn btn-danger btn-sm" onClick={async()=>{
+                if(!window.confirm(`Disconnect ${item.institution_name}?`)) return;
+                await db.from('plaid_items').delete().eq('id',item.id);
+                toast_(`${item.institution_name} disconnected`,'success');
+                await reload();
+              }}>Disconnect</button>
+            </div>
           </div>
         ))}
         <div style={{display:'flex',gap:8,marginTop:12}}>
