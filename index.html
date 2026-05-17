@@ -387,13 +387,20 @@ async function autoLogPaychecks(data,uid){
     while(cur<=new Date()){payDates.push(cur.toISOString().slice(0,10));cur.setDate(cur.getDate()+7);}
   }
 
-  // Only auto-log if user has no income history at all (new setup)
-  if(incomeEvents.length>0) return false;
+  // Find last logged paycheck date — only auto-add dates after that
+  const lastPaycheckDate=incomeEvents
+    .filter(e=>e.type==='paycheck')
+    .map(e=>e.date)
+    .sort()
+    .pop()||null;
 
-  // Filter to past dates not already logged (within ±4 days)
+  // Filter to past dates after the last paycheck (with ±4 day dedup window)
   const toLog=payDates.filter(pd=>{
     if(pd>todayStr) return false;
+    // Skip anything on or before the last logged paycheck
+    if(lastPaycheckDate&&pd<=lastPaycheckDate) return false;
     const pdMs=new Date(pd+'T12:00').getTime();
+    // Don't add if a paycheck already exists within ±4 days
     return !incomeEvents.some(e=>{
       if(e.type!=='paycheck') return false;
       return Math.abs(new Date(e.date+'T12:00').getTime()-pdMs)<=345600000;
