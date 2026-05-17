@@ -294,8 +294,8 @@ const D={
     await db.from('settings').insert({id:key,key,value,user_id:uid});
   },
   async setBudget(cat,amt,uid){
-    await db.from('budget_targets').delete().eq('id',cat).eq('user_id',uid);
-    await db.from('budget_targets').insert({id:cat,category:cat,monthly_amount:amt,user_id:uid});
+    await db.from('budget_targets').delete().eq('category',cat).eq('user_id',uid);
+    await db.from('budget_targets').insert({id:crypto.randomUUID(),category:cat,monthly_amount:amt,user_id:uid});
   },
   async addTx(t,uid){
     const{data,error}=await db.from('transactions').insert({...t,user_id:uid}).select().single();
