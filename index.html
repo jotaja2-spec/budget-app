@@ -1088,7 +1088,11 @@ function NetWorthCard({data}){
   const{assets,liabilities,netWorth}=calcNetWorth(data);
   const typeLabels={checking:'Checking',savings:'Savings',investment:'Investments',retirement:'Retirement',hsa:'HSA',property:'Property',cash:'Cash',other:'Other',credit:'Credit Cards',credit_standalone:'Credit Cards'};
   const byType={};
-  accounts.forEach(a=>{const t=a.type||'checking';byType[t]=(byType[t]||0)+parseFloat(a.balance||0);});
+  accounts.forEach(a=>{
+    // Combine both credit card types into one display group
+    const t=a.type==='credit_standalone'?'credit':(a.type||'checking');
+    byType[t]=(byType[t]||0)+parseFloat(a.balance||0);
+  });
   return(
     <div className="card" style={{marginBottom:16}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
