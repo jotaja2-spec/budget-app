@@ -146,23 +146,28 @@ const db=createClient(SURL,SKEY);
 
 /* ── Defaults (all de-personalized) ── */
 const DEF_CATS=[
-  {name:'Housing',color:'#6c63ff',icon:'🏠'},
-  {name:'Food & Dining',color:'#ff7675',icon:'🍔'},
-  {name:'Groceries',color:'#fdcb6e',icon:'🛒'},
-  {name:'Transportation',color:'#00b894',icon:'🚗'},
-  {name:'Utilities',color:'#0984e3',icon:'💡'},
-  {name:'Healthcare',color:'#e17055',icon:'🏥'},
-  {name:'Entertainment',color:'#a29bfe',icon:'🎮'},
-  {name:'Shopping',color:'#fd79a8',icon:'🛍️'},
-  {name:'Personal Care',color:'#55efc4',icon:'💆'},
-  {name:'Savings',color:'#00cec9',icon:'🐖'},
-  {name:'Other',color:'#636e72',icon:'📦'},
+  {name:'Housing',color:'#6c63ff',emoji:'🏠'},
+  {name:'Eating Out',color:'#ff7675',emoji:'🍽️'},
+  {name:'Groceries',color:'#fdcb6e',emoji:'🛒'},
+  {name:'Car',color:'#00b894',emoji:'🚗'},
+  {name:'Gas',color:'#8B72D4',emoji:'⛽'},
+  {name:'Utilities',color:'#0984e3',emoji:'💡'},
+  {name:'Healthcare',color:'#e17055',emoji:'🏥'},
+  {name:'Entertainment',color:'#a29bfe',emoji:'🎮'},
+  {name:'Shopping',color:'#fd79a8',emoji:'🛍️'},
+  {name:'Personal Care',color:'#55efc4',emoji:'💆'},
+  {name:'Savings',color:'#00cec9',emoji:'🐖'},
+  {name:'Home Improvement',color:'#f39c12',emoji:'🔨'},
+  {name:'Subscriptions',color:'#C9B85A',emoji:'📱'},
+  {name:'Debt Payoff',color:'#D95B5B',emoji:'💳'},
+  {name:'Student Loans',color:'#3DB5AF',emoji:'🎓'},
+  {name:'Other',color:'#636e72',emoji:'📦'},
 ];
 const DEF_QL=[
   {id:'q1',label:'Groceries',amount:0,category:'Groceries',account:'Checking'},
-  {id:'q2',label:'Gas',amount:0,category:'Transportation',account:'Checking'},
-  {id:'q3',label:'Dining',amount:0,category:'Food & Dining',account:'Checking'},
-  {id:'q4',label:'Coffee',amount:0,category:'Food & Dining',account:'Checking'},
+  {id:'q2',label:'Gas',amount:0,category:'Gas',account:'Checking'},
+  {id:'q3',label:'Dining',amount:0,category:'Eating Out',account:'Checking'},
+  {id:'q4',label:'Coffee',amount:0,category:'Eating Out',account:'Checking'},
 ];
 const DEF_ACCTS=['Checking','Savings','Credit Card','Cash'];
 const DEF_FREQ='semimonthly'; // semimonthly | biweekly | weekly | monthly
@@ -1752,7 +1757,7 @@ function DebtTab({data,uid,toast_,reload}){
           </div>
           {debts.length===0&&<Empty h="No debts" msg="Add loans, credit cards, and other debts to track payoff." icon="💳"/>}
           {debts.map(d=>(
-            <DebtCard key={d.id} debt={d} uid={uid} toast_={toast_} reload={reload}/>
+            <DebtCard key={d.id} debt={d} uid={uid} toast_={toast_} reload={reload} accounts={data.accounts}/>
           ))}
           {adding&&<DebtForm uid={uid} onSave={async()=>{setAdding(false);await reload();}} onCancel={()=>setAdding(false)} toast_={toast_}/>}
 
@@ -1809,7 +1814,7 @@ function DebtTab({data,uid,toast_,reload}){
   );
 }
 
-function DebtCard({debt,uid,toast_,reload}){
+function DebtCard({debt,uid,toast_,reload,accounts=[]}){
   const[editing,setEditing]=useState(false);
   const[paying,setPaying]=useState(false);
   const[payMode,setPayMode]=useState('extra'); // extra | update
@@ -1840,7 +1845,7 @@ function DebtCard({debt,uid,toast_,reload}){
         await D.addTx({
           description:`Extra Payment — ${debt.name}`,
           amount:amt,date:today(),
-          category:'Debt Payoff',account:'FNB Checking',
+          category:'Debt Payoff',account:accounts.find(a=>a.type==='checking')?.name||accounts[0]?.name||'Checking',
           note:'Extra principal payment'
         },uid);
       }
@@ -2848,7 +2853,7 @@ function App(){
         {showClaim&&<ClaimBanner uid={user.id} onClaim={async()=>{setShowClaim(false);await loadAll();}} onDismiss={()=>setShowClaim(false)}/>}
 
         {tab==='dash'&&<DashTab data={data} uid={user.id} onAdd={()=>setShowAdd(true)} onAddIncome={()=>setShowIncome(true)} onTrans={()=>setTab('trans')} toast_={toast_}/>}
-        {tab==='income'&&<IncomeTab data={data} uid={user.id} onAdd={()=>setShowIncome(true)} toast_={toast_} reload={loadAll}/>}
+        {/* Income is accessible via Settings → Income tab */}
         {tab==='budget'&&<BudgetTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
         {tab==='debts'&&<DebtTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
         {tab==='trends'&&<TrendsTab data={data}/>}
