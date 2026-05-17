@@ -2283,6 +2283,124 @@ function CategoryManager({data,uid,toast_,reload}){
   );
 }
 
+/* ── Net Worth Tab ── */
+function NetWorthTab({data,uid,toast_,reload}){
+  const{accounts=[],debts=[]}=data;
+  const{assets,liabilities,netWorth}=calcNetWorth(data);
+  const[addingAccount,setAddingAccount]=useState(false);
+
+  const assetAccounts=accounts.filter(a=>a.type!=='credit'&&a.type!=='credit_standalone');
+  const ccAccounts=accounts.filter(a=>a.type==='credit'||a.type==='credit_standalone');
+  const totalCC=ccAccounts.reduce((s,a)=>s+parseFloat(a.balance||0),0);
+
+  const typeLabels={checking:'🏦 Checking',savings:'💰 Savings',investment:'📈 Investment',retirement:'🏛️ Retirement',hsa:'🏥 HSA',property:'🏠 Property',cash:'💵 Cash',other:'📦 Other',credit:'💳 Credit Cards',credit_standalone:'💳 Credit Cards'};
+
+  return(
+    <div>
+      {/* Big net worth number */}
+      <div className="card" style={{textAlign:'center',marginBottom:12,padding:'24px 16px'}}>
+        <div style={{fontSize:13,color:'var(--muted)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>Net Worth</div>
+        <div style={{fontSize:40,fontWeight:800,color:netWorth>=0?'var(--green)':'var(--red)'}}>{netWorth>=0?'+':'-'}{fmt(Math.abs(netWorth))}</div>
+        <div style={{display:'flex',justifyContent:'center',gap:24,marginTop:12}}>
+          <div><div style={{fontSize:11,color:'var(--muted)'}}>ASSETS</div><div style={{fontWeight:700,color:'var(--green)'}}>{fmt(assets)}</div></div>
+          <div style={{width:1,background:'var(--border)'}}/>
+          <div><div style={{fontSize:11,color:'var(--muted)'}}>LIABILITIES</div><div style={{fontWeight:700,color:'var(--red)'}}>{fmt(liabilities)}</div></div>
+        </div>
+      </div>
+
+      {/* Assets */}
+      <div className="section-title">Assets</div>
+      <div className="card" style={{marginBottom:12}}>
+        {assetAccounts.length===0&&<div style={{color:'var(--muted)',fontSize:13}}>No accounts yet — add one below.</div>}
+        {assetAccounts.map(a=>(
+          <AccountRow key={a.id} account={a} toast_={toast_} reload={reload}/>
+        ))}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:assetAccounts.length?8:0,borderTop:assetAccounts.length?'1px solid var(--border)':'none',marginTop:assetAccounts.length?4:0}}>
+          <span style={{fontWeight:700}}>Total Assets</span>
+          <span style={{fontWeight:800,color:'var(--green)'}}>{fmt(assets)}</span>
+        </div>
+      </div>
+
+      {/* Debts / Liabilities */}
+      <div className="section-title">Liabilities</div>
+      <div className="card" style={{marginBottom:12}}>
+        {debts.filter(d=>d.current_balance>0).map(d=>(
+          <div key={d.id} className="row-item">
+            <div className="row-left">
+              <div style={{fontWeight:600}}>{d.name}</div>
+              <div style={{fontSize:12,color:'var(--muted)'}}>{d.interest_rate>0?`${d.interest_rate}% APR`:d.promo_end?`0% until ${new Date(d.promo_end).toLocaleDateString('en-US',{month:'short',year:'numeric'})}`:''}</div>
+            </div>
+            <div style={{fontWeight:700,color:'var(--red)'}}>-{fmt(d.current_balance)}</div>
+          </div>
+        ))}
+        {ccAccounts.length>0&&(
+          <div className="row-item">
+            <div className="row-left">
+              <div style={{fontWeight:600}}>Credit Cards (display only)</div>
+              <div style={{fontSize:12,color:'var(--muted)'}}>tracked in accounts above</div>
+            </div>
+            <div style={{fontWeight:700,color:'var(--muted)'}}>{fmt(totalCC)}</div>
+          </div>
+        )}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:8,borderTop:'1px solid var(--border)',marginTop:4}}>
+          <span style={{fontWeight:700}}>Total Liabilities</span>
+          <span style={{fontWeight:800,color:'var(--red)'}}>-{fmt(liabilities)}</span>
+        </div>
+      </div>
+
+      {/* Add account */}
+      <button className="btn btn-secondary" onClick={()=>setAddingAccount(a=>!a)} style={{marginBottom:12,width:'100%'}}>+ Add Account</button>
+      {addingAccount&&(
+        <div className="card">
+          <NewAccountForm uid={uid} toast_={toast_} reload={async()=>{setAddingAccount(false);await reload();}} onCancel={()=>setAddingAccount(false)}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NewAccountForm({uid,toast_,reload,onCancel}){
+  const[name,setName]=useState('');
+  const[bal,setBal]=useState('');
+  const[type,setType]=useState('checking');
+  const[saving,setSaving]=useState(false);
+  async function save(){
+    if(!name){toast_('Enter a name','error');return;}
+    setSaving(true);
+    await D.addAccount({name,balance:parseFloat(bal)||0,type},uid);
+    toast_('Account added','success');
+    await reload();
+    setSaving(false);
+  }
+  return(
+    <div>
+      <div style={{fontWeight:600,marginBottom:12}}>New Account</div>
+      <div className="field"><label>Name</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Ally Savings"/></div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <div className="field"><label>Balance</label><input type="number" value={bal} onChange={e=>setBal(e.target.value)} placeholder="0.00" inputMode="decimal"/></div>
+        <div className="field"><label>Type</label>
+          <select value={type} onChange={e=>setType(e.target.value)}>
+            <option value="checking">Checking</option>
+            <option value="savings">Savings</option>
+            <option value="investment">Investment</option>
+            <option value="retirement">Retirement (401k)</option>
+            <option value="hsa">HSA</option>
+            <option value="property">Property</option>
+            <option value="credit">Credit Card (in Debts tab)</option>
+            <option value="credit_standalone">Credit Card (not in Debts tab)</option>
+            <option value="cash">Cash</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving} style={{flex:1}}>{saving?'Saving…':'Add Account'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 /* ── Plaid Section ── */
 function PlaidSection({uid,session,toast_,reload,data}){
   const[linking,setLinking]=useState(false);
@@ -2464,7 +2582,6 @@ function SettingsTab({data,uid,user,session,toast_,reload,onLogout,onTrans}){
         </div>
         <button className="btn btn-danger btn-sm" onClick={onLogout}>Sign Out</button>
       </div>
-      <NetWorthCard data={data}/>
 
       <button className="btn btn-secondary" onClick={onTrans} style={{marginBottom:12,width:'100%'}}>📋 View &amp; Edit Transactions</button>
       <div className="tab-pills">
@@ -2560,6 +2677,7 @@ const NavIcons={
   trends:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
   settings:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>,
   trans:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
+  networth:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
 };
 
 /* ══════════════════════════════════════════════
@@ -2692,6 +2810,7 @@ function App(){
         {tab==='trends'&&<TrendsTab data={data}/>}
         {tab==='settings'&&<SettingsTab data={data} uid={user.id} user={user} session={session} toast_={toast_} reload={loadAll} onLogout={handleLogout} onTrans={()=>setTab('trans')}/>}
         {tab==='trans'&&<TransTab data={data} uid={user.id} onAdd={()=>setShowAdd(true)} toast_={toast_} reload={loadAll}/>}
+        {tab==='networth'&&<NetWorthTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
       </div>
 
       {/* FAB */}
@@ -2707,7 +2826,7 @@ function App(){
           {id:'debts',label:'Debts',icon:NavIcons.debts},
           {id:'trends',label:'Trends',icon:NavIcons.trends},
           {id:'income',label:'Income',icon:NavIcons.income},
-          {id:'trans',label:'Trans',icon:NavIcons.trans},
+          {id:'networth',label:'Net Worth',icon:NavIcons.networth},
           {id:'settings',label:'Settings',icon:NavIcons.settings},
         ].map(n=>(
           <button key={n.id} className={`bnav-item${tab===n.id?' active':''}`} onClick={()=>setTab(n.id)}>
