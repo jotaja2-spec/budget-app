@@ -186,6 +186,22 @@ function daysUntil(date){
   return Math.ceil(diff/(1000*60*60*24));
 }
 
+function calcSinglePayoff(balance,monthlyPayment,annualRate){
+  if(!balance||!monthlyPayment) return null;
+  let bal=parseFloat(balance);
+  const pmt=parseFloat(monthlyPayment);
+  const rate=parseFloat(annualRate||0)/100/12;
+  let months=0;
+  while(bal>0&&months<600){
+    bal=bal+bal*rate-pmt;
+    months++;
+  }
+  if(months>=600) return null;
+  const dt=new Date();
+  dt.setMonth(dt.getMonth()+months);
+  return{months,date:dt};
+}
+
 function calcPayoffTimeline(debts){
   if(!debts||!debts.length) return [];
   const active=debts.filter(d=>d.current_balance>0&&d.monthly_payment>0)
@@ -1378,7 +1394,9 @@ function DebtCard({debt,uid,toast_,reload}){
   const[payAmt,setPayAmt]=useState('');
   const[logTx,setLogTx]=useState(true);
   const[savingPay,setSavingPay]=useState(false);
-  const pct=debt.original_balance?Math.round(((debt.original_balance-debt.current_balance)/debt.original_balance)*100):0;
+  const origBal=debt.original_amount||debt.original_balance||debt.current_balance;
+  const pct=origBal?Math.round(((origBal-debt.current_balance)/origBal)*100):0;
+  const payoff=calcSinglePayoff(debt.current_balance,debt.monthly_payment,debt.interest_rate);
 
   async function del(){
     await D.deleteDebt(debt.id);
@@ -1415,8 +1433,15 @@ function DebtCard({debt,uid,toast_,reload}){
           {debt.current_balance<=0?'✅ Paid off':fmt(debt.current_balance)}
         </div>
       </div>
-      <div style={{fontSize:12,color:'var(--muted)',marginBottom:8}}>{debt.interest_rate||0}% APR · {fmt(debt.monthly_payment)}/mo</div>
-      {debt.original_balance>0&&<ProgBar pct={pct} color={debt.color||'var(--accent)'}/>}
+      <div style={{fontSize:12,color:'var(--muted)',marginBottom:6}}>{debt.interest_rate||0}% APR · {fmt(debt.monthly_payment)}/mo</div>
+      <ProgBar pct={pct} color={debt.color||'var(--accent)'}/>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:4,marginBottom:4}}>
+        <span style={{fontSize:11,color:'var(--muted)'}}>{pct}% paid off</span>
+        {payoff&&<span style={{fontSize:11,color:'var(--accent)',fontWeight:600}}>
+          🏁 Paid off {payoff.date.toLocaleDateString('en-US',{month:'short',year:'numeric'})} · {payoff.months} mo
+        </span>}
+        {!payoff&&debt.current_balance>0&&<span style={{fontSize:11,color:'var(--muted)'}}>Set monthly payment to see payoff date</span>}
+      </div>
 
       {paying&&(
         <div style={{marginTop:12,padding:12,background:'var(--bg)',borderRadius:8,border:'1px solid var(--border)'}}>
@@ -1450,7 +1475,7 @@ function DebtCard({debt,uid,toast_,reload}){
 function DebtForm({uid,item,onSave,onCancel,toast_}){
   const[name,setName]=useState(item?.name||'');
   const[bal,setBal]=useState(item?.current_balance||'');
-  const[orig,setOrig]=useState(item?.original_balance||'');
+  const[orig,setOrig]=useState(item?.original_amount||item?.original_balance||'');
   const[rate,setRate]=useState(item?.interest_rate||'');
   const[pmt,setPmt]=useState(item?.monthly_payment||'');
   const[color,setColor]=useState(item?.color||'#6c63ff');
@@ -1458,7 +1483,7 @@ function DebtForm({uid,item,onSave,onCancel,toast_}){
   async function save(){
     if(!name||!bal){toast_('Name and balance required','error');return;}
     setSaving(true);
-    const obj={name,current_balance:parseFloat(bal),original_balance:parseFloat(orig)||parseFloat(bal),interest_rate:parseFloat(rate)||0,monthly_payment:parseFloat(pmt)||0,color};
+    const obj={name,current_balance:parseFloat(bal),original_amount:parseFloat(orig)||parseFloat(bal),interest_rate:parseFloat(rate)||0,monthly_payment:parseFloat(pmt)||0,color};
     if(item?.id){await D.updateDebt(item.id,obj);}
     else{await D.addDebt(obj,uid);}
     toast_('Saved','success');await onSave();setSaving(false);
