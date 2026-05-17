@@ -1840,7 +1840,7 @@ function DebtCard({debt,uid,toast_,reload}){
         await D.addTx({
           description:`Extra Payment — ${debt.name}`,
           amount:amt,date:today(),
-          category:'Other',account:'Checking',
+          category:'Debt Payoff',account:'FNB Checking',
           note:'Extra principal payment'
         },uid);
       }
@@ -2392,6 +2392,56 @@ function NewAccountForm({uid,toast_,reload,onCancel}){
   );
 }
 
+/* ── Plaid Item Row ── */
+function PlaidItemRow({item,toast_,reload}){
+  const[editing,setEditing]=useState(false);
+  const[name,setName]=useState(item.institution_name);
+  const[saving,setSaving]=useState(false);
+
+  async function save(){
+    setSaving(true);
+    const old=item.institution_name;
+    await db.from('plaid_items').update({institution_name:name}).eq('id',item.id);
+    // Update all transactions referencing the old institution name
+    await db.from('transactions').update({account:name}).eq('account',old).eq('user_id',item.user_id);
+    toast_('Renamed','success');
+    setEditing(false);
+    await reload();
+    setSaving(false);
+  }
+
+  if(editing) return(
+    <div style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+      <div style={{display:'flex',gap:8,marginBottom:8}}>
+        <input value={name} onChange={e=>setName(e.target.value)}
+          style={{flex:1,background:'var(--bg)',border:'1px solid var(--border)',borderRadius:6,padding:'8px 12px',color:'var(--text)',fontSize:15}}/>
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>{saving?'…':'Save'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={()=>{setEditing(false);setName(item.institution_name);}}>✕</button>
+      </div>
+      <div style={{fontSize:11,color:'var(--muted)'}}>Renaming also updates all transactions from this bank.</div>
+    </div>
+  );
+
+  return(
+    <div className="row-item">
+      <div className="row-left">
+        <div style={{fontWeight:600}}>{item.institution_name}</div>
+        <div style={{fontSize:12,color:'var(--muted)'}}>{item.last_synced_at?`Last synced ${new Date(item.last_synced_at).toLocaleDateString()}`:'Never synced'}</div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <div style={{color:'var(--green)',fontSize:12,fontWeight:600}}>✓</div>
+        <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>Rename</button>
+        <button className="btn btn-danger btn-sm" onClick={async()=>{
+          if(!window.confirm(`Disconnect ${item.institution_name}?`)) return;
+          await db.from('plaid_items').delete().eq('id',item.id);
+          toast_(`${item.institution_name} disconnected`,'success');
+          await reload();
+        }}>✕</button>
+      </div>
+    </div>
+  );
+}
+
 /* ── Plaid Section ── */
 function PlaidSection({uid,session,toast_,reload,data}){
   const[linking,setLinking]=useState(false);
@@ -2446,21 +2496,7 @@ function PlaidSection({uid,session,toast_,reload,data}){
         <div style={{fontSize:12,color:'var(--muted)',marginBottom:12}}>Transactions and balances sync automatically every time you open the app.</div>
         {plaid_items.length===0&&<div style={{color:'var(--muted)',fontSize:14,marginBottom:12}}>No banks connected yet.</div>}
         {plaid_items.map(item=>(
-          <div key={item.id} className="row-item">
-            <div className="row-left">
-              <div style={{fontWeight:600}}>{item.institution_name}</div>
-              <div style={{fontSize:12,color:'var(--muted)'}}>{item.last_synced_at?`Last synced ${new Date(item.last_synced_at).toLocaleDateString()}`:'Never synced'}</div>
-            </div>
-            <div style={{display:'flex',alignItems:'center',gap:10}}>
-              <div style={{color:'var(--green)',fontSize:12,fontWeight:600}}>✓</div>
-              <button className="btn btn-danger btn-sm" onClick={async()=>{
-                if(!window.confirm(`Disconnect ${item.institution_name}?`)) return;
-                await db.from('plaid_items').delete().eq('id',item.id);
-                toast_(`${item.institution_name} disconnected`,'success');
-                await reload();
-              }}>Disconnect</button>
-            </div>
-          </div>
+          <PlaidItemRow key={item.id} item={item} toast_={toast_} reload={reload}/>
         ))}
         <div style={{display:'flex',gap:8,marginTop:12}}>
           <button className="btn btn-primary" onClick={connectBank} disabled={linking} style={{flex:1}}>{linking?'Opening…':'+ Connect Bank'}</button>
@@ -2745,10 +2781,10 @@ function App(){
             headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
             body:JSON.stringify({})
           }).then(r=>r.json()).then(async res=>{
-            if(res.added>0){
-              const fresh=await D.getAll(user.id);
-              setData(fresh);
-            }
+            // Always reload — sync updates balances even when no new transactions
+            const fresh=await D.getAll(user.id);
+            setData(fresh);
+            if(res.added>0) console.log(`Plaid: synced ${res.added} new transactions`);
           }).catch(()=>{});
         }
       }
