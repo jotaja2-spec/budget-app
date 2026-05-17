@@ -1518,22 +1518,62 @@ function DebtForm({uid,item,onSave,onCancel,toast_}){
 
 function GoalCard({goal,uid,toast_,reload}){
   const[editing,setEditing]=useState(false);
-  const pct=goal.target_amount?Math.round((goal.current_amount/goal.target_amount)*100):0;
+  const[adding,setAdding]=useState(false);
+  const[addAmt,setAddAmt]=useState('');
+  const[saving,setSaving]=useState(false);
+  const pct=goal.target_amount?Math.min(100,Math.round((goal.current_amount/goal.target_amount)*100)):0;
+  const remaining=Math.max(0,parseFloat(goal.target_amount||0)-parseFloat(goal.current_amount||0));
+
   async function del(){
     await D.deleteGoal(goal.id);
     toast_('Goal removed','success');
     await reload();
   }
+
+  async function submitFunds(){
+    const amt=parseFloat(addAmt);
+    if(!amt||amt<=0){toast_('Enter a valid amount','error');return;}
+    setSaving(true);
+    const newAmt=parseFloat(goal.current_amount||0)+amt;
+    await D.upsertGoal({...goal,current_amount:newAmt},uid);
+    toast_(`+${fmt(amt)} added! ${fmt(Math.max(0,parseFloat(goal.target_amount||0)-newAmt))} to go`,'success');
+    setAdding(false);setAddAmt('');
+    await reload();
+    setSaving(false);
+  }
+
   if(editing) return<GoalForm uid={uid} item={goal} onSave={async()=>{setEditing(false);await reload();}} onCancel={()=>setEditing(false)} toast_={toast_}/>;
   return(
     <div className="card" style={{marginBottom:10}}>
       <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
         <div style={{fontWeight:700,fontSize:16}}>{goal.emoji||'🎯'} {goal.name}</div>
-        <div style={{fontWeight:700,color:'var(--accent2)'}}>{fmt(goal.current_amount)}</div>
+        <div style={{fontWeight:700,color:pct>=100?'var(--green)':'var(--accent2)'}}>{fmt(goal.current_amount)}</div>
       </div>
-      <div style={{fontSize:12,color:'var(--muted)',marginBottom:8}}>Goal: {fmt(goal.target_amount)} · {pct}% there{goal.monthly_contribution?` · ${fmt(goal.monthly_contribution)}/mo`:''}</div>
+      <div style={{fontSize:12,color:'var(--muted)',marginBottom:8}}>
+        Goal: {fmt(goal.target_amount)} · {pct}% there
+        {goal.monthly_contribution?` · ${fmt(goal.monthly_contribution)}/mo`:''}
+        {remaining>0?` · ${fmt(remaining)} to go`:''}
+      </div>
       <ProgBar pct={pct} color={goal.color||'var(--accent2)'}/>
+
+      {pct>=100&&<div style={{textAlign:'center',padding:'8px 0',fontSize:14,fontWeight:700,color:'var(--green)'}}>🎉 Goal reached!</div>}
+
+      {adding&&(
+        <div style={{marginTop:12,padding:12,background:'var(--bg)',borderRadius:8,border:'1px solid var(--border)'}}>
+          <div style={{fontWeight:600,marginBottom:8}}>Add Funds</div>
+          <input type="number" value={addAmt} onChange={e=>setAddAmt(e.target.value)}
+            placeholder={goal.monthly_contribution?`Suggested: ${fmt(goal.monthly_contribution)}`:'Amount'}
+            inputMode="decimal" autoFocus
+            style={{width:'100%',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,padding:'10px 12px',color:'var(--text)',fontSize:16,marginBottom:8}}/>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-primary btn-sm" onClick={submitFunds} disabled={saving} style={{flex:1}}>{saving?'Saving…':'Add Funds'}</button>
+            <button className="btn btn-ghost btn-sm" onClick={()=>{setAdding(false);setAddAmt('');}}>Cancel</button>
+          </div>
+        </div>
+      )}
+
       <div style={{display:'flex',gap:8,marginTop:8}}>
+        {pct<100&&<button className="btn btn-primary btn-sm" onClick={()=>setAdding(p=>!p)} style={{flex:1}}>+ Add Funds</button>}
         <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>Edit</button>
         <button className="btn btn-danger btn-sm" onClick={del}>Remove</button>
       </div>
