@@ -397,9 +397,10 @@ function calcCashFlow(data){
 
 function calcNetWorth(data){
   const{accounts=[],debts=[]}=data;
-  const assets=accounts.filter(a=>a.type!=='credit').reduce((s,a)=>s+parseFloat(a.balance||0),0);
-  const liabilities=debts.filter(d=>d.current_balance>0).reduce((s,d)=>s+parseFloat(d.current_balance||0),0);
-  return{assets,liabilities,netWorth:assets-liabilities};
+  const assets=accounts.filter(a=>a.type!=='credit'&&a.type!=='credit_standalone').reduce((s,a)=>s+parseFloat(a.balance||0),0);
+  const standaloneCC=accounts.filter(a=>a.type==='credit_standalone').reduce((s,a)=>s+parseFloat(a.balance||0),0);
+  const debtLiabilities=debts.filter(d=>d.current_balance>0).reduce((s,d)=>s+parseFloat(d.current_balance||0),0);
+  return{assets,liabilities:standaloneCC+debtLiabilities,netWorth:assets-standaloneCC-debtLiabilities};
 }
 
 function findRecurring(transactions){
@@ -1079,7 +1080,7 @@ function SpendingInsights({data}){
 function NetWorthCard({data}){
   const{accounts=[],debts=[]}=data;
   const{assets,liabilities,netWorth}=calcNetWorth(data);
-  const typeLabels={checking:'Checking',savings:'Savings',investment:'Investments',retirement:'Retirement',hsa:'HSA',property:'Property',cash:'Cash',other:'Other',credit:'Credit Cards'};
+  const typeLabels={checking:'Checking',savings:'Savings',investment:'Investments',retirement:'Retirement',hsa:'HSA',property:'Property',cash:'Cash',other:'Other',credit:'Credit Cards',credit_standalone:'Credit Cards'};
   const byType={};
   accounts.forEach(a=>{const t=a.type||'checking';byType[t]=(byType[t]||0)+parseFloat(a.balance||0);});
   return(
@@ -2127,7 +2128,8 @@ function AccountRow({account,toast_,reload}){
         <select value={type} onChange={e=>setType(e.target.value)}>
           <option value="checking">Checking</option>
           <option value="savings">Savings</option>
-          <option value="credit">Credit Card (tracked in Debts tab)</option>
+          <option value="credit">Credit Card (already in Debts tab)</option>
+          <option value="credit_standalone">Credit Card (not in Debts tab)</option>
           <option value="investment">Investment (Robinhood, etc.)</option>
           <option value="retirement">Retirement (401k, IRA)</option>
           <option value="hsa">HSA</option>
