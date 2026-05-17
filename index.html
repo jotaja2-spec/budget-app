@@ -2542,7 +2542,7 @@ function AccountRow({account,toast_,reload}){
   );
 }
 
-function SettingsTab({data,uid,user,session,toast_,reload,onLogout,onTrans}){
+function SettingsTab({data,uid,user,session,toast_,reload,onLogout,onTrans,onAddIncome}){
   const{settings=[],accounts=[],quick_log_items=[],categories=[]}=data;
   const[sub,setSub]=useState('general');
   const[payFreq,setPayFreq]=useState(settings.find(s=>(s.key||s.id)==='pay_frequency')?.value||'semimonthly');
@@ -2586,6 +2586,7 @@ function SettingsTab({data,uid,user,session,toast_,reload,onLogout,onTrans}){
       <button className="btn btn-secondary" onClick={onTrans} style={{marginBottom:12,width:'100%'}}>📋 View &amp; Edit Transactions</button>
       <div className="tab-pills">
         <button className={`tab-pill${sub==='banks'?' active':''}`} onClick={()=>setSub('banks')}>🏦 Banks</button>
+        <button className={`tab-pill${sub==='income'?' active':''}`} onClick={()=>setSub('income')}>Income</button>
         <button className={`tab-pill${sub==='general'?' active':''}`} onClick={()=>setSub('general')}>General</button>
         <button className={`tab-pill${sub==='customize'?' active':''}`} onClick={()=>setSub('customize')}>Customize</button>
         <button className={`tab-pill${sub==='data'?' active':''}`} onClick={()=>setSub('data')}>Data</button>
@@ -2637,6 +2638,9 @@ function SettingsTab({data,uid,user,session,toast_,reload,onLogout,onTrans}){
 
       {sub==='banks'&&(
         <PlaidSection uid={uid} session={session} toast_={toast_} reload={reload} data={data}/>
+      )}
+      {sub==='income'&&(
+        <IncomeTab data={data} uid={uid} onAdd={onAddIncome} toast_={toast_} reload={reload}/>
       )}
 
       {sub==='data'&&(
@@ -2808,7 +2812,7 @@ function App(){
         {tab==='budget'&&<BudgetTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
         {tab==='debts'&&<DebtTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
         {tab==='trends'&&<TrendsTab data={data}/>}
-        {tab==='settings'&&<SettingsTab data={data} uid={user.id} user={user} session={session} toast_={toast_} reload={loadAll} onLogout={handleLogout} onTrans={()=>setTab('trans')}/>}
+        {tab==='settings'&&<SettingsTab data={data} uid={user.id} user={user} session={session} toast_={toast_} reload={loadAll} onLogout={handleLogout} onTrans={()=>setTab('trans')} onAddIncome={()=>setShowIncome(true)}/>}
         {tab==='trans'&&<TransTab data={data} uid={user.id} onAdd={()=>setShowAdd(true)} toast_={toast_} reload={loadAll}/>}
         {tab==='networth'&&<NetWorthTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
       </div>
@@ -2825,7 +2829,6 @@ function App(){
           {id:'budget',label:'Budget',icon:NavIcons.budget},
           {id:'debts',label:'Debts',icon:NavIcons.debts},
           {id:'trends',label:'Trends',icon:NavIcons.trends},
-          {id:'income',label:'Income',icon:NavIcons.income},
           {id:'networth',label:'Net Worth',icon:NavIcons.networth},
           {id:'settings',label:'Settings',icon:NavIcons.settings},
         ].map(n=>(
