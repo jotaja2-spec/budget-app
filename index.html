@@ -403,21 +403,37 @@ function calcNetWorth(data){
 }
 
 function findRecurring(transactions){
+  // Group by description + exact amount (within $0.50) — finds true subscriptions
   const groups={};
   transactions.forEach(t=>{
     if(!t.amount||!t.date||parseFloat(t.amount)<=0) return;
-    const desc=(t.description||'').toUpperCase().replace(/[^A-Z0-9 ]/g,'').replace(/\s+/g,' ').trim().slice(0,25);
+    const desc=(t.description||'').toUpperCase().replace(/[^A-Z0-9 ]/g,'').replace(/\s+/g,' ').trim().slice(0,30);
     if(desc.length<3) return;
+    const amt=parseFloat(t.amount);
     const month=t.date.slice(0,7);
-    if(!groups[desc]) groups[desc]={desc,months:new Set(),amounts:[],category:t.category};
-    groups[desc].months.add(month);
-    groups[desc].amounts.push(parseFloat(t.amount));
+    // Find existing group with same desc and amount within $0.50
+    const key=Object.keys(groups).find(k=>{
+      const g=groups[k];
+      return g.desc===desc&&Math.abs(g.amount-amt)<=0.50;
+    });
+    if(key){
+      groups[key].months.add(month);
+      groups[key].occurrences++;
+    } else {
+      const gk=`${desc}__${amt}`;
+      groups[gk]={desc,amount:amt,months:new Set([month]),occurrences:1,category:t.category};
+    }
   });
-  return Object.values(groups).filter(g=>g.months.size>=2).map(g=>({
-    desc:g.desc.charAt(0)+g.desc.slice(1).toLowerCase(),
-    avgAmount:g.amounts.reduce((s,a)=>s+a,0)/g.amounts.length,
-    months:g.months.size,category:g.category,
-  })).sort((a,b)=>b.avgAmount-a.avgAmount).slice(0,12);
+  return Object.values(groups)
+    .filter(g=>g.months.size>=2) // appeared in at least 2 different months
+    .map(g=>({
+      desc:g.desc.charAt(0)+g.desc.slice(1).toLowerCase(),
+      amount:g.amount,
+      months:g.months.size,
+      category:g.category,
+    }))
+    .sort((a,b)=>b.amount-a.amount)
+    .slice(0,15);
 }
 
 function calcRollover(cat,budget_targets,transactions){
@@ -1095,7 +1111,7 @@ function RecurringSection({data}){
   const recurring=useMemo(()=>findRecurring(transactions),[transactions]);
   if(!recurring.length) return null;
   const shown=expanded?recurring:recurring.slice(0,5);
-  const totalMonthly=recurring.reduce((s,r)=>s+r.avgAmount,0);
+  const totalMonthly=recurring.reduce((s,r)=>s+r.amount,0);
   return(
     <div className="card" style={{marginBottom:12}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -1106,9 +1122,9 @@ function RecurringSection({data}){
         <div key={i} className="row-item">
           <div className="row-left">
             <div style={{fontWeight:600,fontSize:14}}>{r.desc}</div>
-            <div style={{fontSize:11,color:'var(--muted)'}}>{r.category||'Uncategorized'} · {r.months} months</div>
+            <div style={{fontSize:11,color:'var(--muted)'}}>{r.category||'Uncategorized'} · seen {r.months} months</div>
           </div>
-          <div style={{fontWeight:700}}>{fmt(r.avgAmount)}/mo</div>
+          <div style={{fontWeight:700}}>{fmt(r.amount)}/mo</div>
         </div>
       ))}
       {recurring.length>5&&<button className="btn btn-ghost btn-sm" onClick={()=>setExpanded(e=>!e)} style={{marginTop:8,width:'100%'}}>
