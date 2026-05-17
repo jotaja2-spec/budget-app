@@ -369,6 +369,67 @@ const D={
   },
 };
 
+/* ── Feature Helpers ── */
+function calcCashFlow(data){
+  const{transactions=[],income_events=[],fixed_items=[],settings=[]}=data;
+  const now=new Date();
+  const y=now.getFullYear(),m=now.getMonth();
+  const mKey=`${y}-${String(m+1).padStart(2,'0')}`;
+  const todayStr=today();
+  const incomeThisMonth=income_events.filter(e=>e.date?.startsWith(mKey)).reduce((s,e)=>s+parseFloat(e.amount||0),0);
+  const spentThisMonth=transactions.filter(t=>t.date?.startsWith(mKey)&&t.type!=='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const freq=settings.find(s=>(s.key||s.id)==='pay_frequency')?.value||'semimonthly';
+  const perCheck=parseFloat(settings.find(s=>(s.key||s.id)==='pay_per_check')?.value||0)||0;
+  let remainingPaychecks=0;
+  if(perCheck>0&&freq==='semimonthly'){
+    const p1=`${y}-${String(m+1).padStart(2,'0')}-01`;
+    const p15=`${y}-${String(m+1).padStart(2,'0')}-15`;
+    if(p1>todayStr) remainingPaychecks++;
+    if(p15>todayStr) remainingPaychecks++;
+  }
+  const billsRemaining=fixed_items.filter(f=>{
+    if(!f.due_day||!f.amount) return false;
+    const dd=`${y}-${String(m+1).padStart(2,'0')}-${String(f.due_day).padStart(2,'0')}`;
+    return dd>todayStr&&dd.startsWith(mKey);
+  }).reduce((s,f)=>s+parseFloat(f.amount||0),0);
+  return{incomeThisMonth,expectedIncome:incomeThisMonth+remainingPaychecks*perCheck,spentThisMonth,billsRemaining,remainingPaychecks,projected:(incomeThisMonth+remainingPaychecks*perCheck)-spentThisMonth-billsRemaining,perCheck};
+}
+
+function calcNetWorth(data){
+  const{accounts=[],debts=[]}=data;
+  const assets=accounts.reduce((s,a)=>s+parseFloat(a.balance||0),0);
+  const liabilities=debts.filter(d=>d.current_balance>0).reduce((s,d)=>s+parseFloat(d.current_balance||0),0);
+  return{assets,liabilities,netWorth:assets-liabilities};
+}
+
+function findRecurring(transactions){
+  const groups={};
+  transactions.forEach(t=>{
+    if(!t.amount||!t.date||parseFloat(t.amount)<=0) return;
+    const desc=(t.description||'').toUpperCase().replace(/[^A-Z0-9 ]/g,'').replace(/\s+/g,' ').trim().slice(0,25);
+    if(desc.length<3) return;
+    const month=t.date.slice(0,7);
+    if(!groups[desc]) groups[desc]={desc,months:new Set(),amounts:[],category:t.category};
+    groups[desc].months.add(month);
+    groups[desc].amounts.push(parseFloat(t.amount));
+  });
+  return Object.values(groups).filter(g=>g.months.size>=2).map(g=>({
+    desc:g.desc.charAt(0)+g.desc.slice(1).toLowerCase(),
+    avgAmount:g.amounts.reduce((s,a)=>s+a,0)/g.amounts.length,
+    months:g.months.size,category:g.category,
+  })).sort((a,b)=>b.avgAmount-a.avgAmount).slice(0,12);
+}
+
+function calcRollover(cat,budget_targets,transactions){
+  const now=new Date();
+  const lm=new Date(now.getFullYear(),now.getMonth()-1,1);
+  const lmKey=`${lm.getFullYear()}-${String(lm.getMonth()+1).padStart(2,'0')}`;
+  const budget=parseFloat(budget_targets.find(b=>b.category===cat)?.monthly_amount||0);
+  if(!budget) return 0;
+  const spent=transactions.filter(t=>t.date?.startsWith(lmKey)&&t.category===cat&&t.type!=='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  return Math.max(0,Math.round((budget-spent)*100)/100);
+}
+
 /* ── Auto Paycheck Logger ── */
 async function autoLogPaychecks(data,uid){
   const settings=data.settings||[];
@@ -895,6 +956,197 @@ function IncomeModal({uid,accounts,onSave,onClose,toast_}){
   );
 }
 
+/* ── Cash Flow Card ── */
+function CashFlowCard({data}){
+  const cf=calcCashFlow(data);
+  const good=cf.projected>=0;
+  return(
+    <div className={`sbanner ${good?'green':'red'}`} style={{flexDirection:'column',alignItems:'stretch',gap:10,marginBottom:12}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <span style={{fontWeight:700,fontSize:15}}>💰 Month Forecast</span>
+        <span style={{fontWeight:800,fontSize:19}}>{good?'+':'-'}{fmt(Math.abs(cf.projected))}</span>
+      </div>
+      <div style={{display:'flex',gap:0,background:'rgba(0,0,0,.15)',borderRadius:8,overflow:'hidden'}}>
+        {[
+          {label:'Received',val:fmt(cf.incomeThisMonth)},
+          {label:'Bills Left',val:fmt(cf.billsRemaining)},
+          {label:'Spent',val:fmt(cf.spentThisMonth)},
+          ...(cf.remainingPaychecks>0?[{label:'Checks Left',val:cf.remainingPaychecks}]:[]),
+        ].map((item,i)=>(
+          <div key={i} style={{flex:1,padding:'8px 6px',textAlign:'center',borderRight:'1px solid rgba(255,255,255,.1)'}}>
+            <div style={{fontSize:10,opacity:.75,marginBottom:2}}>{item.label}</div>
+            <div style={{fontWeight:700,fontSize:13}}>{item.val}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Spending Insights ── */
+function SpendingInsights({data}){
+  const{transactions=[],budget_targets=[]}=data;
+  const now=new Date();
+  const mKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const lm=new Date(now.getFullYear(),now.getMonth()-1,1);
+  const lmKey=`${lm.getFullYear()}-${String(lm.getMonth()+1).padStart(2,'0')}`;
+  const thisM={},lastM={};
+  transactions.forEach(t=>{
+    if(t.type==='income') return;
+    if(t.date?.startsWith(mKey)) thisM[t.category]=(thisM[t.category]||0)+parseFloat(t.amount||0);
+    if(t.date?.startsWith(lmKey)) lastM[t.category]=(lastM[t.category]||0)+parseFloat(t.amount||0);
+  });
+  const insights=[];
+  Object.entries(thisM).forEach(([cat,spent])=>{
+    const last=lastM[cat]||0;
+    const budget=parseFloat(budget_targets.find(b=>b.category===cat)?.monthly_amount||0);
+    if(budget>0&&spent>=budget) insights.push({type:'red',text:`${cat} over budget (${fmt(spent-budget)} over)`});
+    else if(budget>0&&spent>=budget*0.8) insights.push({type:'amber',text:`${cat} at ${Math.round(spent/budget*100)}% of budget`});
+    if(last>0&&spent>last*1.25&&spent-last>40) insights.push({type:'amber',text:`${cat} up ${fmt(spent-last)} vs last month`});
+  });
+  Object.entries(lastM).forEach(([cat,last])=>{
+    const curr=thisM[cat]||0;
+    if(last>100&&curr<last*0.75) insights.push({type:'green',text:`${cat} down ${fmt(last-curr)} vs last month 👍`});
+  });
+  if(!insights.length) return null;
+  return(
+    <div style={{marginBottom:12}}>
+      <div className="section-title">💡 Insights</div>
+      {insights.slice(0,3).map((ins,i)=>(
+        <div key={i} style={{padding:'8px 12px',borderRadius:8,marginBottom:6,fontSize:13,fontWeight:500,
+          background:ins.type==='red'?'rgba(255,92,107,.1)':ins.type==='amber'?'rgba(255,184,77,.1)':'rgba(74,222,128,.1)',
+          color:ins.type==='red'?'var(--red)':ins.type==='amber'?'var(--amber)':'var(--green)',
+          border:`1px solid ${ins.type==='red'?'rgba(255,92,107,.25)':ins.type==='amber'?'rgba(255,184,77,.25)':'rgba(74,222,128,.25)'}`}}>
+          {ins.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Net Worth Card ── */
+function NetWorthCard({data}){
+  const{accounts=[],debts=[]}=data;
+  const{assets,liabilities,netWorth}=calcNetWorth(data);
+  const typeLabels={checking:'Checking',savings:'Savings',investment:'Investments',retirement:'Retirement',hsa:'HSA',property:'Property',credit:'Credit',cash:'Cash',other:'Other'};
+  const byType={};
+  accounts.forEach(a=>{const t=a.type||'checking';byType[t]=(byType[t]||0)+parseFloat(a.balance||0);});
+  return(
+    <div className="card" style={{marginBottom:16}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:16}}>Net Worth</div>
+        <div style={{fontWeight:800,fontSize:22,color:netWorth>=0?'var(--green)':'var(--red)'}}>{netWorth>=0?'+':''}{fmt(netWorth)}</div>
+      </div>
+      <div style={{display:'flex',gap:8,marginBottom:12}}>
+        <div style={{flex:1,background:'rgba(74,222,128,.1)',borderRadius:8,padding:'10px 12px',border:'1px solid rgba(74,222,128,.2)'}}>
+          <div style={{fontSize:11,color:'var(--muted)',marginBottom:2}}>ASSETS</div>
+          <div style={{fontWeight:700,color:'var(--green)',fontSize:16}}>{fmt(assets)}</div>
+        </div>
+        <div style={{flex:1,background:'rgba(255,92,107,.1)',borderRadius:8,padding:'10px 12px',border:'1px solid rgba(255,92,107,.2)'}}>
+          <div style={{fontSize:11,color:'var(--muted)',marginBottom:2}}>LIABILITIES</div>
+          <div style={{fontWeight:700,color:'var(--red)',fontSize:16}}>{fmt(liabilities)}</div>
+        </div>
+      </div>
+      {Object.entries(byType).filter(([,v])=>v!==0).map(([type,bal])=>(
+        <div key={type} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:13}}>
+          <span style={{color:'var(--muted)'}}>{typeLabels[type]||type}</span>
+          <span style={{fontWeight:600,color:parseFloat(bal)<0?'var(--red)':'var(--text)'}}>{fmt(bal)}</span>
+        </div>
+      ))}
+      {liabilities>0&&<div style={{display:'flex',justifyContent:'space-between',padding:'3px 0',fontSize:13,borderTop:'1px solid var(--border)',marginTop:6,paddingTop:6}}>
+        <span style={{color:'var(--muted)'}}>Total Debt</span>
+        <span style={{fontWeight:600,color:'var(--red)'}}>-{fmt(liabilities)}</span>
+      </div>}
+    </div>
+  );
+}
+
+/* ── Recurring Charges ── */
+function RecurringSection({data}){
+  const{transactions=[]}=data;
+  const[expanded,setExpanded]=useState(false);
+  const recurring=useMemo(()=>findRecurring(transactions),[transactions]);
+  if(!recurring.length) return null;
+  const shown=expanded?recurring:recurring.slice(0,5);
+  const totalMonthly=recurring.reduce((s,r)=>s+r.avgAmount,0);
+  return(
+    <div className="card" style={{marginBottom:12}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div style={{fontWeight:700,fontSize:16}}>🔁 Recurring Charges</div>
+        <div style={{fontSize:13,color:'var(--muted)',fontWeight:600}}>{fmt(totalMonthly)}/mo</div>
+      </div>
+      {shown.map((r,i)=>(
+        <div key={i} className="row-item">
+          <div className="row-left">
+            <div style={{fontWeight:600,fontSize:14}}>{r.desc}</div>
+            <div style={{fontSize:11,color:'var(--muted)'}}>{r.category||'Uncategorized'} · {r.months} months</div>
+          </div>
+          <div style={{fontWeight:700}}>{fmt(r.avgAmount)}/mo</div>
+        </div>
+      ))}
+      {recurring.length>5&&<button className="btn btn-ghost btn-sm" onClick={()=>setExpanded(e=>!e)} style={{marginTop:8,width:'100%'}}>
+        {expanded?'Show less ▲':`Show all ${recurring.length} ▼`}
+      </button>}
+    </div>
+  );
+}
+
+/* ── Year in Review ── */
+function YearInReview({data}){
+  const{transactions=[],income_events=[],categories=[]}=data;
+  const year=new Date().getFullYear();
+  const ytdTx=transactions.filter(t=>t.date?.startsWith(String(year))&&t.type!=='income');
+  const ytdIncome=income_events.filter(e=>e.date?.startsWith(String(year)));
+  if(ytdTx.length===0) return null;
+  const totalSpent=ytdTx.reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const totalIncome=ytdIncome.reduce((s,e)=>s+parseFloat(e.amount||0),0);
+  const catSpend={};
+  ytdTx.forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+parseFloat(t.amount||0)});
+  const topCats=Object.entries(catSpend).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const monthlySpend={};
+  ytdTx.forEach(t=>{const mk=t.date?.slice(0,7);if(mk) monthlySpend[mk]=(monthlySpend[mk]||0)+parseFloat(t.amount||0)});
+  const months=Object.entries(monthlySpend).sort((a,b)=>a[0].localeCompare(b[0]));
+  const bestMonth=months.length?months.reduce((b,m)=>m[1]<b[1]?m:b):null;
+  const worstMonth=months.length?months.reduce((w,m)=>m[1]>w[1]?m:w):null;
+  return(
+    <div className="card" style={{marginBottom:12}}>
+      <div style={{fontWeight:700,fontSize:16,marginBottom:12}}>📅 {year} Year to Date</div>
+      <div className="grid2" style={{marginBottom:8}}>
+        <MCard label="Spent" val={fmt(totalSpent)} color="var(--red)" small/>
+        <MCard label="Earned" val={fmt(totalIncome)} color="var(--green)" small/>
+      </div>
+      <MCard label="Net" val={(totalIncome-totalSpent>=0?'+':'')+fmt(Math.abs(totalIncome-totalSpent))} color={totalIncome-totalSpent>=0?'var(--green)':'var(--red)'} small/>
+      <div style={{marginTop:12}}>
+        <div className="section-title" style={{marginTop:8}}>Top Categories</div>
+        {topCats.map(([cat,amt],i)=>{
+          const c=categories.find(x=>x.name===cat);
+          return(
+            <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0'}}>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span>{c?.emoji||'📦'}</span>
+                <span style={{fontSize:13}}>{cat}</span>
+              </div>
+              <span style={{fontWeight:700,fontSize:13}}>{fmt(amt)}</span>
+            </div>
+          );
+        })}
+      </div>
+      {bestMonth&&worstMonth&&<div style={{display:'flex',gap:8,marginTop:12}}>
+        <div style={{flex:1,background:'rgba(74,222,128,.1)',borderRadius:8,padding:'8px 10px'}}>
+          <div style={{fontSize:10,color:'var(--muted)'}}>LOWEST MONTH</div>
+          <div style={{fontWeight:700,fontSize:13}}>{monthLabel(bestMonth[0]+'-01')}</div>
+          <div style={{fontSize:12,color:'var(--green)'}}>{fmt(bestMonth[1])}</div>
+        </div>
+        <div style={{flex:1,background:'rgba(255,92,107,.1)',borderRadius:8,padding:'8px 10px'}}>
+          <div style={{fontSize:10,color:'var(--muted)'}}>HIGHEST MONTH</div>
+          <div style={{fontWeight:700,fontSize:13}}>{monthLabel(worstMonth[0]+'-01')}</div>
+          <div style={{fontSize:12,color:'var(--red)'}}>{fmt(worstMonth[1])}</div>
+        </div>
+      </div>}
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════
    DASH TAB
 ══════════════════════════════════════════════ */
@@ -951,6 +1203,12 @@ function DashTab({data,uid,onAdd,onAddIncome,toast_}){
 
   return(
     <div>
+      {/* Cash flow forecast */}
+      <CashFlowCard data={data}/>
+
+      {/* Spending insights */}
+      <SpendingInsights data={data}/>
+
       {/* Status banner */}
       <div className={`sbanner ${statusColor}`}>
         <span style={{fontSize:20}}>{statusIcon}</span>
@@ -1216,7 +1474,9 @@ function BudgetTab({data,uid,toast_,reload}){
           </div>
           {categories.map(c=>{
             const spent=catSpend[c.name]||0;
-            const budget=parseFloat(budget_targets.find(b=>b.category===c.name)?.monthly_amount||0);
+            const baseBudget=parseFloat(budget_targets.find(b=>b.category===c.name)?.monthly_amount||0);
+            const rollover=baseBudget>0?calcRollover(c.name,budget_targets,transactions):0;
+            const budget=baseBudget+rollover;
             const pct=budget?Math.round((spent/budget)*100):0;
             return(
               <div key={c.id||c.name} className="card-sm" style={{marginBottom:8}}>
@@ -1227,7 +1487,10 @@ function BudgetTab({data,uid,toast_,reload}){
                   </div>
                   <div style={{textAlign:'right'}}>
                     <div style={{fontWeight:700,fontSize:15}}>{fmt(spent)}{budget?<span style={{color:'var(--muted)',fontWeight:400}}> / {fmt(budget)}</span>:''}</div>
-                    {editBudget===c.name?null:<button onClick={()=>setEditBudget(c.name)} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12}}>set budget</button>}
+                    <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                      {rollover>0&&<span style={{fontSize:10,color:'var(--accent2)',fontWeight:700}}>+{fmt(rollover)} rollover</span>}
+                      {editBudget===c.name?null:<button onClick={()=>setEditBudget(c.name)} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12}}>{baseBudget?'edit':'set budget'}</button>}
+                    </div>
                   </div>
                 </div>
                 {budget>0&&<ProgBar pct={pct} color={c.color}/>}
@@ -1756,6 +2019,8 @@ function TrendsTab({data}){
           ))}
         </div>
       )}
+      <YearInReview data={data}/>
+      <RecurringSection data={data}/>
     </div>
   );
 }
@@ -1771,12 +2036,14 @@ function AccountRow({account,toast_,reload}){
 
   async function save(){
     setSaving(true);
-    await D.updateAccount(account.id,{balance:parseFloat(bal)||0,name});
+    await D.updateAccount(account.id,{balance:parseFloat(bal)||0,name,type});
     toast_('Saved','success');
     setEditing(false);
     await reload();
     setSaving(false);
   }
+
+  const[type,setType]=useState(account.type||'checking');
 
   if(editing) return(
     <div style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
@@ -1789,6 +2056,19 @@ function AccountRow({account,toast_,reload}){
           <label>Balance</label>
           <input type="number" value={bal} onChange={e=>setBal(e.target.value)} inputMode="decimal"/>
         </div>
+      </div>
+      <div className="field" style={{marginBottom:8}}>
+        <label>Account Type</label>
+        <select value={type} onChange={e=>setType(e.target.value)}>
+          <option value="checking">Checking</option>
+          <option value="savings">Savings</option>
+          <option value="investment">Investment (Robinhood, etc.)</option>
+          <option value="retirement">Retirement (401k, IRA)</option>
+          <option value="hsa">HSA</option>
+          <option value="property">Property (Home value)</option>
+          <option value="cash">Cash</option>
+          <option value="other">Other</option>
+        </select>
       </div>
       <div style={{display:'flex',gap:8}}>
         <button className="btn btn-primary btn-sm" onClick={save} disabled={saving} style={{flex:1}}>{saving?'Saving…':'Save'}</button>
@@ -1844,13 +2124,14 @@ function SettingsTab({data,uid,user,toast_,reload,onLogout}){
 
   return(
     <div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <div>
           <div style={{fontWeight:700}}>{user?.email}</div>
           <div style={{fontSize:12,color:'var(--muted)'}}>Logged in</div>
         </div>
         <button className="btn btn-danger btn-sm" onClick={onLogout}>Sign Out</button>
       </div>
+      <NetWorthCard data={data}/>
 
       <div className="tab-pills">
         <button className={`tab-pill${sub==='general'?' active':''}`} onClick={()=>setSub('general')}>General</button>
