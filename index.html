@@ -397,9 +397,10 @@ function calcCashFlow(data){
 
 function calcNetWorth(data){
   const{accounts=[],debts=[]}=data;
-  const assets=accounts.reduce((s,a)=>s+parseFloat(a.balance||0),0);
-  const liabilities=debts.filter(d=>d.current_balance>0).reduce((s,d)=>s+parseFloat(d.current_balance||0),0);
-  return{assets,liabilities,netWorth:assets-liabilities};
+  const assets=accounts.filter(a=>a.type!=='credit').reduce((s,a)=>s+parseFloat(a.balance||0),0);
+  const ccLiabilities=accounts.filter(a=>a.type==='credit').reduce((s,a)=>s+parseFloat(a.balance||0),0);
+  const debtLiabilities=debts.filter(d=>d.current_balance>0).reduce((s,d)=>s+parseFloat(d.current_balance||0),0);
+  return{assets,liabilities:ccLiabilities+debtLiabilities,netWorth:assets-ccLiabilities-debtLiabilities};
 }
 
 function findRecurring(transactions){
@@ -1079,7 +1080,7 @@ function SpendingInsights({data}){
 function NetWorthCard({data}){
   const{accounts=[],debts=[]}=data;
   const{assets,liabilities,netWorth}=calcNetWorth(data);
-  const typeLabels={checking:'Checking',savings:'Savings',credit:'Credit Cards',investment:'Investments',retirement:'Retirement',hsa:'HSA',property:'Property',cash:'Cash',other:'Other'};
+  const typeLabels={checking:'Checking',savings:'Savings',investment:'Investments',retirement:'Retirement',hsa:'HSA',property:'Property',cash:'Cash',other:'Other',credit:'Credit Cards'};
   const byType={};
   accounts.forEach(a=>{const t=a.type||'checking';byType[t]=(byType[t]||0)+parseFloat(a.balance||0);});
   return(
@@ -2127,6 +2128,7 @@ function AccountRow({account,toast_,reload}){
         <select value={type} onChange={e=>setType(e.target.value)}>
           <option value="checking">Checking</option>
           <option value="savings">Savings</option>
+          <option value="credit">Credit Card (not in Debts tab)</option>
           <option value="investment">Investment (Robinhood, etc.)</option>
           <option value="retirement">Retirement (401k, IRA)</option>
           <option value="hsa">HSA</option>
@@ -2227,7 +2229,7 @@ function SettingsTab({data,uid,user,toast_,reload,onLogout,onTrans}){
 
           <div className="card">
             <div style={{fontWeight:600,marginBottom:4}}>Account Balances</div>
-            <div style={{fontSize:12,color:'var(--muted)',marginBottom:12}}>Tap an account to update its balance.</div>
+            <div style={{fontSize:12,color:'var(--muted)',marginBottom:12}}>Tap to edit. Add credit cards here only if they're <em>not</em> already tracked in the Debts tab — otherwise they'll be double-counted.</div>
             {accounts.map(a=>(
               <AccountRow key={a.id} account={a} toast_={toast_} reload={reload}/>
             ))}
