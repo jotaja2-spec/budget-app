@@ -2333,15 +2333,6 @@ function NetWorthTab({data,uid,toast_,reload}){
             <div style={{fontWeight:700,color:'var(--red)'}}>-{fmt(d.current_balance)}</div>
           </div>
         ))}
-        {ccAccounts.length>0&&(
-          <div className="row-item">
-            <div className="row-left">
-              <div style={{fontWeight:600}}>Credit Cards (display only)</div>
-              <div style={{fontSize:12,color:'var(--muted)'}}>tracked in accounts above</div>
-            </div>
-            <div style={{fontWeight:700,color:'var(--muted)'}}>{fmt(totalCC)}</div>
-          </div>
-        )}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:8,borderTop:'1px solid var(--border)',marginTop:4}}>
           <span style={{fontWeight:700}}>Total Liabilities</span>
           <span style={{fontWeight:800,color:'var(--red)'}}>-{fmt(liabilities)}</span>
