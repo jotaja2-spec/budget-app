@@ -1745,6 +1745,54 @@ function TrendsTab({data}){
 /* ══════════════════════════════════════════════
    SETTINGS TAB
 ══════════════════════════════════════════════ */
+function AccountRow({account,toast_,reload}){
+  const[editing,setEditing]=useState(false);
+  const[bal,setBal]=useState(account.balance||0);
+  const[name,setName]=useState(account.name||'');
+  const[saving,setSaving]=useState(false);
+
+  async function save(){
+    setSaving(true);
+    await D.updateAccount(account.id,{balance:parseFloat(bal)||0,name});
+    toast_('Saved','success');
+    setEditing(false);
+    await reload();
+    setSaving(false);
+  }
+
+  if(editing) return(
+    <div style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+        <div className="field" style={{marginBottom:0}}>
+          <label>Name</label>
+          <input value={name} onChange={e=>setName(e.target.value)}/>
+        </div>
+        <div className="field" style={{marginBottom:0}}>
+          <label>Balance</label>
+          <input type="number" value={bal} onChange={e=>setBal(e.target.value)} inputMode="decimal"/>
+        </div>
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving} style={{flex:1}}>{saving?'Saving…':'Save'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(false)}>Cancel</button>
+      </div>
+    </div>
+  );
+
+  return(
+    <div className="row-item" style={{cursor:'pointer'}} onClick={()=>setEditing(true)}>
+      <div className="row-left">
+        <div style={{fontWeight:600}}>{account.name}</div>
+        <div style={{fontSize:12,color:'var(--muted)'}}>{account.type||'account'} · tap to edit</div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <div style={{fontWeight:700,color:parseFloat(account.balance||0)<0?'var(--red)':'var(--text)'}}>{fmt(account.balance||0)}</div>
+        <div style={{color:'var(--accent)',fontSize:12}}>✎</div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsTab({data,uid,user,toast_,reload,onLogout}){
   const{settings=[],accounts=[],quick_log_items=[],categories=[]}=data;
   const[sub,setSub]=useState('general');
@@ -1813,13 +1861,17 @@ function SettingsTab({data,uid,user,toast_,reload,onLogout}){
           </div>
 
           <div className="card">
-            <div style={{fontWeight:600,marginBottom:8}}>Accounts ({accounts.length})</div>
+            <div style={{fontWeight:600,marginBottom:4}}>Account Balances</div>
+            <div style={{fontSize:12,color:'var(--muted)',marginBottom:12}}>Tap an account to update its balance.</div>
             {accounts.map(a=>(
-              <div key={a.id} className="row-item">
-                <div className="row-left"><div style={{fontWeight:600}}>{a.name}</div><div style={{fontSize:12,color:'var(--muted)'}}>{a.type||'account'}</div></div>
-                <div style={{fontWeight:700}}>{fmt(a.balance||0)}</div>
-              </div>
+              <AccountRow key={a.id} account={a} toast_={toast_} reload={reload}/>
             ))}
+            <button className="btn btn-ghost btn-sm" style={{marginTop:8,width:'100%'}} onClick={async()=>{
+              const name=prompt('Account name?');
+              if(!name) return;
+              await D.addAccount({name,balance:0,type:'checking'},uid);
+              await reload();
+            }}>+ Add Account</button>
           </div>
         </div>
       )}
