@@ -1593,9 +1593,7 @@ function BudgetTab({data,uid,toast_,reload}){
           </div>
           {categories.map(c=>{
             const spent=catSpend[c.name]||0;
-            const baseBudget=parseFloat(budget_targets.find(b=>b.category===c.name)?.monthly_amount||0);
-            const rollover=baseBudget>0?calcRollover(c.name,budget_targets,transactions):0;
-            const budget=baseBudget+rollover;
+            const budget=parseFloat(budget_targets.find(b=>b.category===c.name)?.monthly_amount||0);
             const pct=budget?Math.round((spent/budget)*100):0;
             return(
               <div key={c.id||c.name} className="card-sm" style={{marginBottom:8}}>
@@ -1606,10 +1604,7 @@ function BudgetTab({data,uid,toast_,reload}){
                   </div>
                   <div style={{textAlign:'right'}}>
                     <div style={{fontWeight:700,fontSize:15}}>{fmt(spent)}{budget?<span style={{color:'var(--muted)',fontWeight:400}}> / {fmt(budget)}</span>:''}</div>
-                    <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                      {rollover>0&&<span style={{fontSize:10,color:'var(--accent2)',fontWeight:700}}>+{fmt(rollover)} rollover</span>}
-                      {editBudget===c.name?null:<button onClick={()=>setEditBudget(c.name)} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12}}>{baseBudget?'edit':'set budget'}</button>}
-                    </div>
+                    {editBudget===c.name?null:<button onClick={()=>setEditBudget(c.name)} style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:12}}>{budget?'edit':'set budget'}</button>}
                   </div>
                 </div>
                 {budget>0&&<ProgBar pct={pct} color={c.color}/>}
