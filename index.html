@@ -8,6 +8,7 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -240,10 +241,10 @@ const D={
   async getAll(uid){
     const q=t=>db.from(t).select('*').or(`user_id.eq.${uid},user_id.is.null`);
     const qOwn=t=>db.from(t).select('*').eq('user_id',uid);
-    const [txR,catR,fiR,qlR,debtR,acctR,setR,budR,incR,goalR]=await Promise.all([
+    const [txR,catR,fiR,qlR,debtR,acctR,setR,budR,incR,goalR,plaidR]=await Promise.all([
       q('transactions'),q('categories'),q('fixed_items'),q('quick_log_items'),
       q('debts'),q('accounts'),q('settings'),q('budget_targets'),
-      qOwn('income_events'),qOwn('savings_goals'),
+      qOwn('income_events'),qOwn('savings_goals'),qOwn('plaid_items'),
     ]);
     return{
       transactions:txR.data||[],categories:catR.data||[],
@@ -251,6 +252,7 @@ const D={
       debts:debtR.data||[],accounts:acctR.data||[],
       settings:setR.data||[],budget_targets:budR.data||[],
       income_events:incR.data||[],savings_goals:goalR.data||[],
+      plaid_items:plaidR.data||[],
     };
   },
   async hasLegacyData(){
@@ -2281,6 +2283,77 @@ function CategoryManager({data,uid,toast_,reload}){
   );
 }
 
+/* ── Plaid Section ── */
+function PlaidSection({uid,session,toast_,reload,data}){
+  const[linking,setLinking]=useState(false);
+  const[syncing,setSyncing]=useState(false);
+  const{plaid_items=[]}=data;
+
+  const FNURL=`${SURL}/functions/v1`;
+  const headers={'Content-Type':'application/json','Authorization':`Bearer ${session?.access_token}`};
+
+  async function connectBank(){
+    setLinking(true);
+    try{
+      const res=await fetch(`${FNURL}/plaid-link-token`,{method:'POST',headers,body:JSON.stringify({})});
+      const{link_token,error}=await res.json();
+      if(error) throw new Error(error);
+      const handler=window.Plaid.create({
+        token:link_token,
+        onSuccess:async(public_token,metadata)=>{
+          const r=await fetch(`${FNURL}/plaid-exchange-token`,{
+            method:'POST',headers,
+            body:JSON.stringify({public_token,institution_name:metadata.institution.name,institution_id:metadata.institution.institution_id})
+          });
+          const d=await r.json();
+          if(d.error) throw new Error(d.error);
+          toast_(`${metadata.institution.name} connected!`,'success');
+          await syncAll();
+          await reload();
+        },
+        onExit:(err)=>{if(err) toast_(err.display_message||'Connection cancelled','info');setLinking(false);},
+      });
+      handler.open();
+    }catch(e){toast_(e.message||'Failed to connect','error');setLinking(false);}
+  }
+
+  async function syncAll(){
+    setSyncing(true);
+    try{
+      const res=await fetch(`${FNURL}/plaid-sync`,{method:'POST',headers,body:JSON.stringify({})});
+      const{added,error}=await res.json();
+      if(error) throw new Error(error);
+      if(added>0) toast_(`Synced ${added} new transactions`,'success');
+      else toast_('All up to date','success');
+      await reload();
+    }catch(e){toast_(e.message||'Sync failed','error');}
+    setSyncing(false);
+  }
+
+  return(
+    <div>
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>🏦 Connected Banks</div>
+        <div style={{fontSize:12,color:'var(--muted)',marginBottom:12}}>Transactions and balances sync automatically every time you open the app.</div>
+        {plaid_items.length===0&&<div style={{color:'var(--muted)',fontSize:14,marginBottom:12}}>No banks connected yet.</div>}
+        {plaid_items.map(item=>(
+          <div key={item.id} className="row-item">
+            <div className="row-left">
+              <div style={{fontWeight:600}}>{item.institution_name}</div>
+              <div style={{fontSize:12,color:'var(--muted)'}}>{item.last_synced_at?`Last synced ${new Date(item.last_synced_at).toLocaleDateString()}`:'Never synced'}</div>
+            </div>
+            <div style={{color:'var(--green)',fontSize:12,fontWeight:600}}>✓ Connected</div>
+          </div>
+        ))}
+        <div style={{display:'flex',gap:8,marginTop:12}}>
+          <button className="btn btn-primary" onClick={connectBank} disabled={linking} style={{flex:1}}>{linking?'Opening…':'+ Connect Bank'}</button>
+          {plaid_items.length>0&&<button className="btn btn-secondary" onClick={syncAll} disabled={syncing} style={{flex:1}}>{syncing?'Syncing…':'⟳ Sync Now'}</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AccountRow({account,toast_,reload}){
   const[editing,setEditing]=useState(false);
   const[bal,setBal]=useState(account.balance||0);
@@ -2351,7 +2424,7 @@ function AccountRow({account,toast_,reload}){
   );
 }
 
-function SettingsTab({data,uid,user,toast_,reload,onLogout,onTrans}){
+function SettingsTab({data,uid,user,session,toast_,reload,onLogout,onTrans}){
   const{settings=[],accounts=[],quick_log_items=[],categories=[]}=data;
   const[sub,setSub]=useState('general');
   const[payFreq,setPayFreq]=useState(settings.find(s=>(s.key||s.id)==='pay_frequency')?.value||'semimonthly');
@@ -2395,6 +2468,7 @@ function SettingsTab({data,uid,user,toast_,reload,onLogout,onTrans}){
 
       <button className="btn btn-secondary" onClick={onTrans} style={{marginBottom:12,width:'100%'}}>📋 View &amp; Edit Transactions</button>
       <div className="tab-pills">
+        <button className={`tab-pill${sub==='banks'?' active':''}`} onClick={()=>setSub('banks')}>🏦 Banks</button>
         <button className={`tab-pill${sub==='general'?' active':''}`} onClick={()=>setSub('general')}>General</button>
         <button className={`tab-pill${sub==='customize'?' active':''}`} onClick={()=>setSub('customize')}>Customize</button>
         <button className={`tab-pill${sub==='data'?' active':''}`} onClick={()=>setSub('data')}>Data</button>
@@ -2444,6 +2518,10 @@ function SettingsTab({data,uid,user,toast_,reload,onLogout,onTrans}){
         </div>
       )}
 
+      {sub==='banks'&&(
+        <PlaidSection uid={uid} session={session} toast_={toast_} reload={reload} data={data}/>
+      )}
+
       {sub==='data'&&(
         <div>
           <div className="card">
@@ -2488,7 +2566,8 @@ const NavIcons={
    MAIN APP
 ══════════════════════════════════════════════ */
 function App(){
-  const[user,setUser]=useState(undefined); // undefined=loading
+  const[user,setUser]=useState(undefined);
+  const[session,setSession]=useState(null);
   const[data,setData]=useState(null);
   const[loading,setLoading]=useState(false);
   const[tab,setTab]=useState('dash');
@@ -2502,9 +2581,11 @@ function App(){
   useEffect(()=>{
     db.auth.getSession().then(({data:{session}})=>{
       setUser(session?.user||null);
+      setSession(session);
     });
     const{data:{subscription}}=db.auth.onAuthStateChange((_,session)=>{
       setUser(session?.user||null);
+      setSession(session);
     });
     return()=>subscription.unsubscribe();
   },[]);
@@ -2528,6 +2609,23 @@ function App(){
       const logged=await autoLogPaychecks(d,user.id);
       if(logged) d=await D.getAll(user.id);
       setData(d);
+      // Auto-sync Plaid if banks are connected
+      if(d.plaid_items?.length>0){
+        const sess=await db.auth.getSession();
+        const token=sess.data.session?.access_token;
+        if(token){
+          fetch(`${SURL}/functions/v1/plaid-sync`,{
+            method:'POST',
+            headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`},
+            body:JSON.stringify({})
+          }).then(r=>r.json()).then(async res=>{
+            if(res.added>0){
+              const fresh=await D.getAll(user.id);
+              setData(fresh);
+            }
+          }).catch(()=>{});
+        }
+      }
       // Check legacy
       const hasLeg=await D.hasLegacyData();
       setShowClaim(hasLeg);
@@ -2592,7 +2690,7 @@ function App(){
         {tab==='budget'&&<BudgetTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
         {tab==='debts'&&<DebtTab data={data} uid={user.id} toast_={toast_} reload={loadAll}/>}
         {tab==='trends'&&<TrendsTab data={data}/>}
-        {tab==='settings'&&<SettingsTab data={data} uid={user.id} user={user} toast_={toast_} reload={loadAll} onLogout={handleLogout} onTrans={()=>setTab('trans')}/>}
+        {tab==='settings'&&<SettingsTab data={data} uid={user.id} user={user} session={session} toast_={toast_} reload={loadAll} onLogout={handleLogout} onTrans={()=>setTab('trans')}/>}
         {tab==='trans'&&<TransTab data={data} uid={user.id} onAdd={()=>setShowAdd(true)} toast_={toast_} reload={loadAll}/>}
       </div>
 
