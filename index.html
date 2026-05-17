@@ -1762,6 +1762,7 @@ function DebtTab({data,uid,toast_,reload}){
 function DebtCard({debt,uid,toast_,reload}){
   const[editing,setEditing]=useState(false);
   const[paying,setPaying]=useState(false);
+  const[payMode,setPayMode]=useState('extra'); // extra | update
   const[payAmt,setPayAmt]=useState('');
   const[logTx,setLogTx]=useState(true);
   const[savingPay,setSavingPay]=useState(false);
@@ -1779,17 +1780,23 @@ function DebtCard({debt,uid,toast_,reload}){
     const amt=parseFloat(payAmt);
     if(!amt||amt<=0){toast_('Enter a valid amount','error');return;}
     setSavingPay(true);
-    const newBal=Math.max(0,parseFloat(debt.current_balance)-amt);
-    await D.updateDebt(debt.id,{current_balance:newBal});
-    if(logTx){
-      await D.addTx({
-        description:`Payment — ${debt.name}`,
-        amount:amt,date:today(),
-        category:'Other',account:'Checking',
-        note:'Debt payment'
-      },uid);
+    let newBal;
+    if(payMode==='update'){
+      newBal=Math.max(0,amt); // set exact balance from statement
+      toast_(`Balance updated to ${fmt(newBal)}`,'success');
+    } else {
+      newBal=Math.max(0,parseFloat(debt.current_balance)-amt); // subtract extra payment
+      if(logTx){
+        await D.addTx({
+          description:`Extra Payment — ${debt.name}`,
+          amount:amt,date:today(),
+          category:'Other',account:'Checking',
+          note:'Extra principal payment'
+        },uid);
+      }
+      toast_(`Extra payment logged! Balance now ${fmt(newBal)}`,'success');
     }
-    toast_(`Payment logged! Balance now ${fmt(newBal)}`,'success');
+    await D.updateDebt(debt.id,{current_balance:newBal});
     setPaying(false);setPayAmt('');
     await reload();
     setSavingPay(false);
@@ -1826,9 +1833,15 @@ function DebtCard({debt,uid,toast_,reload}){
 
       {paying&&(
         <div style={{marginTop:12,padding:12,background:'var(--bg)',borderRadius:8,border:'1px solid var(--border)'}}>
-          <div style={{fontWeight:600,marginBottom:8}}>Log a Payment</div>
+          <div style={{display:'flex',gap:6,marginBottom:10}}>
+            <button className={`tab-pill${payMode==='extra'?' active':''}`} onClick={()=>{setPayMode('extra');setPayAmt('');}} style={{flex:1,textAlign:'center'}}>Extra Principal</button>
+            <button className={`tab-pill${payMode==='update'?' active':''}`} onClick={()=>{setPayMode('update');setPayAmt('');}} style={{flex:1,textAlign:'center'}}>Update Balance</button>
+          </div>
+          <div style={{fontSize:12,color:'var(--muted)',marginBottom:8}}>
+            {payMode==='extra'?'Enter extra amount paid toward principal — reduces balance and shortens payoff date.':'Enter your exact current balance from your latest statement.'}
+          </div>
           <input type="number" value={payAmt} onChange={e=>setPayAmt(e.target.value)}
-            placeholder={`Suggested: ${fmt(debt.monthly_payment)}`}
+            placeholder={payMode==='extra'?'Extra amount paid':fmt(debt.current_balance).replace('$','')}
             inputMode="decimal" autoFocus
             style={{width:'100%',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:6,padding:'10px 12px',color:'var(--text)',fontSize:16,marginBottom:8}}/>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,cursor:'pointer'}} onClick={()=>setLogTx(v=>!v)}>
@@ -1838,14 +1851,14 @@ function DebtCard({debt,uid,toast_,reload}){
             <span style={{fontSize:13,color:'var(--muted)',userSelect:'none'}}>Also log as a transaction</span>
           </div>
           <div style={{display:'flex',gap:8}}>
-            <button className="btn btn-primary btn-sm" onClick={submitPayment} disabled={savingPay} style={{flex:1}}>{savingPay?'Saving…':'Log Payment'}</button>
+            <button className="btn btn-primary btn-sm" onClick={submitPayment} disabled={savingPay} style={{flex:1}}>{savingPay?'Saving…':payMode==='update'?'Set Balance':'Log Extra Payment'}</button>
             <button className="btn btn-ghost btn-sm" onClick={()=>{setPaying(false);setPayAmt('');}}>Cancel</button>
           </div>
         </div>
       )}
 
       <div style={{display:'flex',gap:8,marginTop:8}}>
-        {debt.current_balance>0&&<button className="btn btn-primary btn-sm" onClick={()=>setPaying(p=>!p)} style={{flex:1}}>💳 Log Payment</button>}
+        {debt.current_balance>0&&<button className="btn btn-primary btn-sm" onClick={()=>setPaying(p=>!p)} style={{flex:1}}>💳 {paying?'Cancel':'Payment / Update'}</button>}
         <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>Edit</button>
         <button className="btn btn-danger btn-sm" onClick={del}>Remove</button>
       </div>
