@@ -308,6 +308,12 @@ const D={
   async deleteTx(id){
     return db.from('transactions').delete().eq('id',id);
   },
+  async addQuickLogItem(item,uid){return db.from('quick_log_items').insert({...item,id:crypto.randomUUID(),user_id:uid});},
+  async updateQuickLogItem(id,changes){return db.from('quick_log_items').update(changes).eq('id',id);},
+  async deleteQuickLogItem(id){return db.from('quick_log_items').delete().eq('id',id);},
+  async addCategory(cat,uid){return db.from('categories').insert({...cat,id:crypto.randomUUID(),user_id:uid});},
+  async updateCategory(id,changes){return db.from('categories').update(changes).eq('id',id);},
+  async deleteCategory(id){return db.from('categories').delete().eq('id',id);},
   async addDebt(d,uid){
     return db.from('debts').insert({...d,user_id:uid});
   },
@@ -1367,11 +1373,75 @@ function DashTab({data,uid,onAdd,onAddIncome,onTrans,toast_}){
 /* ══════════════════════════════════════════════
    TRANSACTIONS TAB
 ══════════════════════════════════════════════ */
+function TxRow({t,categories,accounts,toast_,reload}){
+  const[editing,setEditing]=useState(false);
+  const[desc,setDesc]=useState(t.description||'');
+  const[amt,setAmt]=useState(t.amount||'');
+  const[cat,setCat]=useState(t.category||'');
+  const[acct,setAcct]=useState(t.account||'');
+  const[date,setDate]=useState(t.date||'');
+  const[saving,setSaving]=useState(false);
+  const c=categories.find(x=>x.name===t.category);
+
+  async function save(){
+    setSaving(true);
+    await D.updateTx(t.id,{description:desc,amount:parseFloat(amt)||0,category:cat,account:acct,date});
+    toast_('Updated','success');
+    setEditing(false);
+    await reload();
+    setSaving(false);
+  }
+
+  async function del(){
+    await D.deleteTx(t.id);
+    toast_('Deleted','success');
+    await reload();
+  }
+
+  if(editing) return(
+    <div className="card-sm" style={{marginBottom:8}}>
+      <div className="field" style={{marginBottom:8}}><label>Description</label><input value={desc} onChange={e=>setDesc(e.target.value)}/></div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <div className="field" style={{marginBottom:8}}><label>Amount</label><input type="number" value={amt} onChange={e=>setAmt(e.target.value)} inputMode="decimal"/></div>
+        <div className="field" style={{marginBottom:8}}><label>Date</label><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
+        <div className="field" style={{marginBottom:8}}><label>Category</label>
+          <select value={cat} onChange={e=>setCat(e.target.value)}>
+            {categories.map(c=><option key={c.id} value={c.name}>{c.emoji} {c.name}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{marginBottom:8}}><label>Account</label>
+          <select value={acct} onChange={e=>setAcct(e.target.value)}>
+            {accounts.map(a=><option key={a.id} value={a.name}>{a.name}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <button className="btn btn-primary btn-sm" onClick={save} disabled={saving} style={{flex:1}}>{saving?'Saving…':'Save'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(false)}>Cancel</button>
+        <button className="btn btn-danger btn-sm" onClick={del}>Delete</button>
+      </div>
+    </div>
+  );
+
+  return(
+    <div className="card-sm" style={{marginBottom:8,display:'flex',alignItems:'center',gap:12,cursor:'pointer'}} onClick={()=>setEditing(true)}>
+      <div style={{fontSize:22}}>{c?.emoji||'📦'}</div>
+      <div style={{flex:1}}>
+        <div style={{fontWeight:600,fontSize:15}}>{t.description}</div>
+        <div style={{fontSize:12,color:'var(--muted)'}}>{t.category} · {dayLabel(t.date)} · {t.account}</div>
+      </div>
+      <div style={{textAlign:'right'}}>
+        <div style={{fontWeight:700}}>{fmt(t.amount)}</div>
+        <div style={{fontSize:11,color:'var(--accent)'}}>tap to edit</div>
+      </div>
+    </div>
+  );
+}
+
 function TransTab({data,uid,onAdd,toast_,reload}){
-  const{transactions=[],categories=[]}=data;
+  const{transactions=[],categories=[],accounts=[]}=data;
   const[search,setSearch]=useState('');
   const[filter,setFilter]=useState('all');
-  const[deleting,setDeleting]=useState(null);
 
   const months=useMemo(()=>{
     const s=new Set(transactions.map(t=>t.date?.slice(0,7)));
@@ -1384,14 +1454,6 @@ function TransTab({data,uid,onAdd,toast_,reload}){
     if(search) tx=tx.filter(t=>(t.description||'').toLowerCase().includes(search.toLowerCase())||(t.category||'').toLowerCase().includes(search.toLowerCase()));
     return tx;
   },[transactions,filter,search]);
-
-  async function del(id){
-    setDeleting(id);
-    await D.deleteTx(id);
-    toast_('Deleted','success');
-    await reload();
-    setDeleting(null);
-  }
 
   return(
     <div>
@@ -1406,26 +1468,13 @@ function TransTab({data,uid,onAdd,toast_,reload}){
         ))}
       </div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-        <div style={{color:'var(--muted)',fontSize:13}}>{visible.length} transactions</div>
+        <div style={{color:'var(--muted)',fontSize:13}}>{visible.length} transactions · tap any to edit</div>
         <button className="btn btn-primary btn-sm" onClick={onAdd}>+ Add</button>
       </div>
       {visible.length===0&&<Empty h="No transactions" msg="Nothing matches your filter." icon="🔍"/>}
-      {visible.map(t=>{
-        const c=categories.find(x=>x.name===t.category);
-        return(
-          <div key={t.id} className="card-sm" style={{marginBottom:8,display:'flex',alignItems:'center',gap:12}}>
-            <div style={{fontSize:24}}>{c?.icon||'📦'}</div>
-            <div style={{flex:1}}>
-              <div style={{fontWeight:600,fontSize:15}}>{t.description}</div>
-              <div style={{fontSize:12,color:'var(--muted)'}}>{t.category} · {dayLabel(t.date)} · {t.account}</div>
-            </div>
-            <div style={{textAlign:'right'}}>
-              <div style={{fontWeight:700,color:t.type==='income'?'var(--green)':'var(--text)'}}>{t.type==='income'?'+':''}{fmt(t.amount)}</div>
-              <button style={{background:'none',border:'none',color:'var(--muted)',cursor:'pointer',fontSize:12,padding:'2px 0'}} onClick={()=>del(t.id)} disabled={deleting===t.id}>{deleting===t.id?'…':'✕'}</button>
-            </div>
-          </div>
-        );
-      })}
+      {visible.map(t=>(
+        <TxRow key={t.id} t={t} categories={categories} accounts={accounts} toast_={toast_} reload={reload}/>
+      ))}
     </div>
   );
 }
@@ -2107,6 +2156,132 @@ function TrendsTab({data}){
 /* ══════════════════════════════════════════════
    SETTINGS TAB
 ══════════════════════════════════════════════ */
+/* ── Quick Log Manager ── */
+function QuickLogManager({data,uid,toast_,reload}){
+  const{quick_log_items=[],categories=[],accounts=[]}=data;
+  const[adding,setAdding]=useState(false);
+  const[editing,setEditing]=useState(null);
+  const EMPTY={name:'',category:categories[0]?.name||'',default_amount:'',account:accounts[0]?.name||'Checking'};
+  const[form,setForm]=useState(EMPTY);
+  const f=(k,v)=>setForm(p=>({...p,[k]:v}));
+
+  async function save(){
+    if(!form.name){toast_('Enter a name','error');return;}
+    if(editing){
+      await D.updateQuickLogItem(editing,{name:form.name,category:form.category,default_amount:form.default_amount||null,account:form.account});
+    }else{
+      await D.addQuickLogItem({name:form.name,category:form.category,default_amount:form.default_amount||null,account:form.account},uid);
+    }
+    toast_('Saved','success');setAdding(false);setEditing(null);setForm(EMPTY);await reload();
+  }
+
+  return(
+    <div className="card">
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div style={{fontWeight:600}}>⚡ Quick Log Items</div>
+        <button className="btn btn-primary btn-sm" onClick={()=>{setAdding(true);setEditing(null);setForm(EMPTY);}}>+ Add</button>
+      </div>
+      {quick_log_items.map(q=>(
+        <div key={q.id} className="row-item">
+          <div className="row-left">
+            <div style={{fontWeight:600}}>{q.name}</div>
+            <div style={{fontSize:12,color:'var(--muted)'}}>{q.category} · {q.account}{q.default_amount?` · ${fmt(q.default_amount)}`:''}</div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:13}} onClick={()=>{setEditing(q.id);setAdding(true);setForm({name:q.name,category:q.category,default_amount:q.default_amount||'',account:q.account||''});}}>Edit</button>
+            <button style={{background:'none',border:'none',color:'var(--red)',cursor:'pointer',fontSize:13}} onClick={async()=>{await D.deleteQuickLogItem(q.id);toast_('Removed','success');await reload();}}>✕</button>
+          </div>
+        </div>
+      ))}
+      {adding&&(
+        <div style={{marginTop:12,padding:12,background:'var(--bg)',borderRadius:8,border:'1px solid var(--border)'}}>
+          <div style={{fontWeight:600,marginBottom:10}}>{editing?'Edit Item':'New Quick Log Item'}</div>
+          <div className="field"><label>Label</label><input value={form.name} onChange={e=>f('name',e.target.value)} placeholder="e.g. Walmart"/></div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div className="field"><label>Category</label>
+              <select value={form.category} onChange={e=>f('category',e.target.value)}>
+                {categories.map(c=><option key={c.id} value={c.name}>{c.emoji} {c.name}</option>)}
+              </select>
+            </div>
+            <div className="field"><label>Account</label>
+              <select value={form.account} onChange={e=>f('account',e.target.value)}>
+                {accounts.map(a=><option key={a.id} value={a.name}>{a.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="field"><label>Default Amount (optional)</label><input type="number" value={form.default_amount} onChange={e=>f('default_amount',e.target.value)} placeholder="0.00" inputMode="decimal"/></div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-primary btn-sm" onClick={save} style={{flex:1}}>Save</button>
+            <button className="btn btn-ghost btn-sm" onClick={()=>{setAdding(false);setEditing(null);setForm(EMPTY);}}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Category Manager ── */
+const PRESET_COLORS=['#6c63ff','#ff7675','#fdcb6e','#00b894','#0984e3','#e17055','#a29bfe','#fd79a8','#55efc4','#00cec9','#636e72','#f39c12','#d63031','#74b9ff'];
+const PRESET_EMOJIS=['🏠','🍔','🛒','🚗','💡','🏥','🎮','🛍️','💆','🐖','📦','✈️','🐾','👶','💪','🎵','📚','🏋️','🌿','💅'];
+
+function CategoryManager({data,uid,toast_,reload}){
+  const{categories=[]}=data;
+  const[adding,setAdding]=useState(false);
+  const[editing,setEditing]=useState(null);
+  const EMPTY={name:'',emoji:'📦',color:'#6c63ff'};
+  const[form,setForm]=useState(EMPTY);
+  const f=(k,v)=>setForm(p=>({...p,[k]:v}));
+
+  async function save(){
+    if(!form.name){toast_('Enter a name','error');return;}
+    if(editing){await D.updateCategory(editing,{name:form.name,emoji:form.emoji,color:form.color});}
+    else{await D.addCategory({name:form.name,emoji:form.emoji,color:form.color},uid);}
+    toast_('Saved','success');setAdding(false);setEditing(null);setForm(EMPTY);await reload();
+  }
+
+  return(
+    <div className="card">
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <div style={{fontWeight:600}}>🏷️ Categories</div>
+        <button className="btn btn-primary btn-sm" onClick={()=>{setAdding(true);setEditing(null);setForm(EMPTY);}}>+ Add</button>
+      </div>
+      {categories.map(c=>(
+        <div key={c.id} className="row-item">
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:10,height:10,borderRadius:'50%',background:c.color,flexShrink:0}}/>
+            <span style={{fontSize:18}}>{c.emoji}</span>
+            <span style={{fontWeight:600}}>{c.name}</span>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button style={{background:'none',border:'none',color:'var(--accent)',cursor:'pointer',fontSize:13}} onClick={()=>{setEditing(c.id);setAdding(true);setForm({name:c.name,emoji:c.emoji||'📦',color:c.color||'#6c63ff'});}}>Edit</button>
+            <button style={{background:'none',border:'none',color:'var(--red)',cursor:'pointer',fontSize:13}} onClick={async()=>{await D.deleteCategory(c.id);toast_('Removed','success');await reload();}}>✕</button>
+          </div>
+        </div>
+      ))}
+      {adding&&(
+        <div style={{marginTop:12,padding:12,background:'var(--bg)',borderRadius:8,border:'1px solid var(--border)'}}>
+          <div style={{fontWeight:600,marginBottom:10}}>{editing?'Edit Category':'New Category'}</div>
+          <div style={{display:'grid',gridTemplateColumns:'60px 1fr',gap:10}}>
+            <div className="field"><label>Emoji</label><input value={form.emoji} onChange={e=>f('emoji',e.target.value)} style={{textAlign:'center',fontSize:20}}/></div>
+            <div className="field"><label>Name</label><input value={form.name} onChange={e=>f('name',e.target.value)} placeholder="Category name"/></div>
+          </div>
+          <div className="field"><label>Color</label>
+            <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:4}}>
+              {PRESET_COLORS.map(col=>(
+                <div key={col} onClick={()=>f('color',col)} style={{width:28,height:28,borderRadius:'50%',background:col,cursor:'pointer',border:form.color===col?'3px solid white':'3px solid transparent',boxShadow:form.color===col?'0 0 0 2px '+col:'none'}}/>
+              ))}
+            </div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-primary btn-sm" onClick={save} style={{flex:1}}>Save</button>
+            <button className="btn btn-ghost btn-sm" onClick={()=>{setAdding(false);setEditing(null);setForm(EMPTY);}}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AccountRow({account,toast_,reload}){
   const[editing,setEditing]=useState(false);
   const[bal,setBal]=useState(account.balance||0);
@@ -2222,6 +2397,7 @@ function SettingsTab({data,uid,user,toast_,reload,onLogout,onTrans}){
       <button className="btn btn-secondary" onClick={onTrans} style={{marginBottom:12,width:'100%'}}>📋 View &amp; Edit Transactions</button>
       <div className="tab-pills">
         <button className={`tab-pill${sub==='general'?' active':''}`} onClick={()=>setSub('general')}>General</button>
+        <button className={`tab-pill${sub==='customize'?' active':''}`} onClick={()=>setSub('customize')}>Customize</button>
         <button className={`tab-pill${sub==='data'?' active':''}`} onClick={()=>setSub('data')}>Data</button>
       </div>
 
@@ -2262,6 +2438,13 @@ function SettingsTab({data,uid,user,toast_,reload,onLogout,onTrans}){
         </div>
       )}
 
+      {sub==='customize'&&(
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <QuickLogManager data={data} uid={uid} toast_={toast_} reload={reload}/>
+          <CategoryManager data={data} uid={uid} toast_={toast_} reload={reload}/>
+        </div>
+      )}
+
       {sub==='data'&&(
         <div>
           <div className="card">
@@ -2298,7 +2481,7 @@ const NavIcons={
   budget:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 6v6l4 2"/></svg>,
   debts:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>,
   trends:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
-  settings:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  settings:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>,
   trans:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
 };
 
@@ -2428,7 +2611,7 @@ function App(){
           {id:'trends',label:'Trends',icon:NavIcons.trends},
           {id:'income',label:'Income',icon:NavIcons.income},
           {id:'trans',label:'Trans',icon:NavIcons.trans},
-          {id:'settings',label:'More',icon:NavIcons.settings},
+          {id:'settings',label:'Settings',icon:NavIcons.settings},
         ].map(n=>(
           <button key={n.id} className={`bnav-item${tab===n.id?' active':''}`} onClick={()=>setTab(n.id)}>
             {n.icon}
