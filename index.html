@@ -295,7 +295,7 @@ const D={
   },
   async setBudget(cat,amt,uid){
     await db.from('budget_targets').delete().eq('id',cat).eq('user_id',uid);
-    await db.from('budget_targets').insert({id:cat,category:cat,amount:amt,user_id:uid});
+    await db.from('budget_targets').insert({id:cat,category:cat,monthly_amount:amt,user_id:uid});
   },
   async addTx(t,uid){
     const{data,error}=await db.from('transactions').insert({...t,user_id:uid}).select().single();
@@ -1166,7 +1166,7 @@ function BudgetTab({data,uid,toast_,reload}){
   const catSpend={};
   mTx.forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+parseFloat(t.amount||0)});
 
-  const budgeted=budget_targets.reduce((s,b)=>s+parseFloat(b.amount||0),0);
+  const budgeted=budget_targets.reduce((s,b)=>s+parseFloat(b.monthly_amount||0),0);
   const totalFixed=fixed_items.reduce((s,f)=>s+parseFloat(f.amount||0),0);
 
   async function saveBudget(cat,amt){
@@ -1191,7 +1191,7 @@ function BudgetTab({data,uid,toast_,reload}){
           </div>
           {categories.map(c=>{
             const spent=catSpend[c.name]||0;
-            const budget=parseFloat(budget_targets.find(b=>b.category===c.name)?.amount||0);
+            const budget=parseFloat(budget_targets.find(b=>b.category===c.name)?.monthly_amount||0);
             const pct=budget?Math.round((spent/budget)*100):0;
             return(
               <div key={c.id||c.name} className="card-sm" style={{marginBottom:8}}>
