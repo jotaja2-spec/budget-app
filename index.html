@@ -1490,7 +1490,7 @@ function DebtCard({debt,uid,toast_,reload}){
       <div style={{display:'flex',justifyContent:'space-between',marginTop:4,marginBottom:4}}>
         <span style={{fontSize:11,color:'var(--muted)'}}>{pct}% paid off</span>
         {payoff&&<span style={{fontSize:11,color:'var(--accent)',fontWeight:600}}>
-          🏁 {payoff.date.toLocaleDateString('en-US',{month:'short',year:'numeric'})} · {payoff.months<12?`${payoff.months}mo`:payoff.months%12>0?`${Math.floor(payoff.months/12)}yr ${payoff.months%12}mo`:`${Math.floor(payoff.months/12)}yr`} alone
+          🏁 {payoff.date.toLocaleDateString('en-US',{month:'short',year:'numeric'})} · {payoff.months<12?`${payoff.months}mo`:payoff.months%12>0?`${Math.floor(payoff.months/12)}yr ${payoff.months%12}mo`:`${Math.floor(payoff.months/12)}yr`}
         </span>}
         {!payoff&&debt.current_balance>0&&debt.monthly_payment>0&&<span style={{fontSize:11,color:'var(--muted)'}}>Add interest rate to see payoff date</span>}
       </div>
