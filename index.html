@@ -684,6 +684,9 @@ function AuthScreen({onAuth}){
   const[err,setErr]=useState('');
   const{toast_,ToastContainer}=useToast();
 
+  const[mfaCode,setMfaCode]=useState('');
+  const[mfaFactorId,setMfaFactorId]=useState(null);
+
   async function submit(e){
     e.preventDefault();
     setBusy(true);setErr('');
@@ -691,9 +694,16 @@ function AuthScreen({onAuth}){
       if(mode==='login'){
         const{data,error}=await db.auth.signInWithPassword({email,password:pass});
         if(error) throw error;
-        if(!remember){
-          // Set short session if not remembering
-          await db.auth.updateUser({});
+        // Check if MFA is required
+        if(data.session===null&&data.user===null){
+          // MFA challenge needed
+          const factors=await db.auth.mfa.listFactors();
+          const totp=factors.data?.totp?.[0];
+          if(totp){
+            const{data:challenge}=await db.auth.mfa.challenge({factorId:totp.id});
+            setMfaFactorId({factorId:totp.id,challengeId:challenge.id});
+            setBusy(false);return;
+          }
         }
         onAuth(data.user);
       }else{
@@ -742,6 +752,26 @@ function AuthScreen({onAuth}){
             {busy?'Please wait…':mode==='login'?'Sign In':'Create Account'}
           </button>
         </form>
+        {/* MFA verification step */}
+        {mfaFactorId&&(
+          <div style={{marginTop:16}}>
+            <div style={{fontWeight:600,marginBottom:8}}>🔐 Enter your authenticator code</div>
+            <div className="field">
+              <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                value={mfaCode} onChange={e=>setMfaCode(e.target.value)}
+                placeholder="000000" style={{letterSpacing:'0.3em',fontSize:24,textAlign:'center'}}/>
+            </div>
+            <button className="btn btn-primary" disabled={busy||mfaCode.length!==6} onClick={async()=>{
+              setBusy(true);
+              try{
+                const{data,error}=await db.auth.mfa.verify({factorId:mfaFactorId.factorId,challengeId:mfaFactorId.challengeId,code:mfaCode});
+                if(error) throw error;
+                onAuth(data.user);
+              }catch(e){setErr(e.message);}
+              setBusy(false);
+            }}>{busy?'Verifying…':'Verify'}</button>
+          </div>
+        )}
         <div className="auth-toggle">
           {mode==='login'?<>Don't have an account? <button onClick={()=>{setMode('signup');setErr('')}}>Sign up</button></>
             :<>Already have an account? <button onClick={()=>{setMode('login');setErr('')}}>Sign in</button></>}
@@ -1567,6 +1597,7 @@ function BudgetTab({data,uid,toast_,reload}){
   const[editBudget,setEditBudget]=useState(null);
   const[editFixed,setEditFixed]=useState(null);
   const[newFixed,setNewFixed]=useState(false);
+  const[drillCat,setDrillCat]=useState(null); // category drill-down
 
   const now=new Date();
   const mStart=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
@@ -1598,6 +1629,33 @@ function BudgetTab({data,uid,toast_,reload}){
             <MCard label="Budgeted" val={fmt(budgeted)} sub="per month"/>
             <MCard label="Spent" val={fmt(mTx.reduce((s,t)=>s+parseFloat(t.amount||0),0))} sub="this month"/>
           </div>
+          {/* Category drill-down modal */}
+          {drillCat&&(
+            <div className="modal-overlay" onClick={()=>setDrillCat(null)}>
+              <div className="modal-sheet" onClick={e=>e.stopPropagation()}>
+                <div className="modal-handle"/>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+                  <div className="modal-title" style={{margin:0}}>{drillCat.emoji} {drillCat.name} — {new Date().toLocaleDateString('en-US',{month:'long'})}</div>
+                  <button onClick={()=>setDrillCat(null)} style={{background:'none',border:'none',color:'var(--muted)',fontSize:22,cursor:'pointer'}}>✕</button>
+                </div>
+                {mTx.filter(t=>t.category===drillCat.name).length===0&&<Empty h="No transactions" msg="Nothing in this category this month." icon="✅"/>}
+                {mTx.filter(t=>t.category===drillCat.name).sort((a,b)=>b.date.localeCompare(a.date)).map(t=>(
+                  <div key={t.id} className="row-item">
+                    <div className="row-left">
+                      <div style={{fontWeight:600}}>{t.description}</div>
+                      <div style={{fontSize:12,color:'var(--muted)'}}>{dayLabel(t.date)} · {t.account}</div>
+                    </div>
+                    <div style={{fontWeight:700}}>{fmt(t.amount)}</div>
+                  </div>
+                ))}
+                <div style={{paddingTop:12,borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between',fontWeight:700}}>
+                  <span>Total</span>
+                  <span>{fmt(mTx.filter(t=>t.category===drillCat.name).reduce((s,t)=>s+parseFloat(t.amount||0),0))}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {categories.map(c=>{
             const spent=catSpend[c.name]||0;
             const budget=parseFloat(budget_targets.find(b=>b.category===c.name)?.monthly_amount||0);
@@ -1605,9 +1663,10 @@ function BudgetTab({data,uid,toast_,reload}){
             return(
               <div key={c.id||c.name} className="card-sm" style={{marginBottom:8}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontSize:18}}>{c.icon}</span>
+                  <div style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',flex:1}} onClick={()=>spent>0&&setDrillCat(c)}>
+                    <span style={{fontSize:18}}>{c.emoji||c.icon}</span>
                     <span style={{fontWeight:600}}>{c.name}</span>
+                    {spent>0&&<span style={{fontSize:11,color:'var(--accent)'}}>›</span>}
                   </div>
                   <div style={{textAlign:'right'}}>
                     <div style={{fontWeight:700,fontSize:15}}>{fmt(spent)}{budget?<span style={{color:'var(--muted)',fontWeight:400}}> / {fmt(budget)}</span>:''}</div>
@@ -2587,6 +2646,87 @@ function AccountRow({account,toast_,reload}){
   );
 }
 
+function MFASection({toast_}){
+  const[status,setStatus]=useState(null); // null=loading, 'none', 'enrolled'
+  const[enrolling,setEnrolling]=useState(false);
+  const[qr,setQr]=useState(null);
+  const[secret,setSecret]=useState(null);
+  const[factorId,setFactorId]=useState(null);
+  const[code,setCode]=useState('');
+  const[verifying,setVerifying]=useState(false);
+
+  useEffect(()=>{
+    db.auth.mfa.listFactors().then(({data})=>{
+      setStatus(data?.totp?.length>0?'enrolled':'none');
+    });
+  },[]);
+
+  async function startEnroll(){
+    setEnrolling(true);
+    const{data,error}=await db.auth.mfa.enroll({factorType:'totp',friendlyName:'Budget App'});
+    if(error){toast_(error.message,'error');setEnrolling(false);return;}
+    setQr(data.totp.qr_code);
+    setSecret(data.totp.secret);
+    setFactorId(data.id);
+  }
+
+  async function verify(){
+    setVerifying(true);
+    try{
+      const{data:challenge}=await db.auth.mfa.challenge({factorId});
+      const{error}=await db.auth.mfa.verify({factorId,challengeId:challenge.id,code});
+      if(error) throw error;
+      toast_('MFA enabled! You are protected 🔐','success');
+      setStatus('enrolled');setEnrolling(false);setQr(null);setCode('');
+    }catch(e){toast_(e.message,'error');}
+    setVerifying(false);
+  }
+
+  async function unenroll(){
+    const{data}=await db.auth.mfa.listFactors();
+    const factor=data?.totp?.[0];
+    if(!factor) return;
+    await db.auth.mfa.unenroll({factorId:factor.id});
+    toast_('MFA removed','success');
+    setStatus('none');
+  }
+
+  if(status===null) return null;
+
+  return(
+    <div className="card" style={{marginBottom:12}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+        <div style={{fontWeight:600}}>🔐 Two-Factor Authentication</div>
+        {status==='enrolled'&&<span style={{fontSize:12,color:'var(--green)',fontWeight:700}}>✓ Enabled</span>}
+      </div>
+      {status==='none'&&!enrolling&&(
+        <>
+          <div style={{fontSize:13,color:'var(--muted)',marginBottom:10}}>Add an authenticator app for extra security. You stay signed in — only asked on new devices.</div>
+          <button className="btn btn-primary btn-sm" onClick={startEnroll}>Enable MFA</button>
+        </>
+      )}
+      {status==='enrolled'&&(
+        <button className="btn btn-danger btn-sm" onClick={unenroll}>Remove MFA</button>
+      )}
+      {enrolling&&qr&&(
+        <div>
+          <div style={{fontSize:13,color:'var(--muted)',marginBottom:10}}>Scan this QR code with Google Authenticator, Authy, or any authenticator app.</div>
+          <img src={qr} style={{width:160,height:160,display:'block',margin:'0 auto 12px',borderRadius:8,background:'white',padding:8}}/>
+          <div style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:12,wordBreak:'break-all'}}>Manual code: {secret}</div>
+          <div className="field">
+            <label>Enter the 6-digit code to confirm</label>
+            <input type="text" inputMode="numeric" maxLength={6} value={code} onChange={e=>setCode(e.target.value)} placeholder="000000" style={{letterSpacing:'0.3em',fontSize:22,textAlign:'center'}}/>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-primary btn-sm" onClick={verify} disabled={verifying||code.length!==6} style={{flex:1}}>{verifying?'Verifying…':'Confirm & Enable'}</button>
+            <button className="btn btn-ghost btn-sm" onClick={()=>{setEnrolling(false);setQr(null);setCode('');}}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsTab({data,uid,user,session,toast_,reload,onLogout,onTrans,onAddIncome}){
   const{settings=[],accounts=[],quick_log_items=[],categories=[]}=data;
   const[sub,setSub]=useState('general');
@@ -2628,7 +2768,8 @@ function SettingsTab({data,uid,user,session,toast_,reload,onLogout,onTrans,onAdd
         <button className="btn btn-danger btn-sm" onClick={onLogout}>Sign Out</button>
       </div>
 
-      <button className="btn btn-secondary" onClick={onTrans} style={{marginBottom:12,width:'100%'}}>📋 View &amp; Edit Transactions</button>
+      <button className="btn btn-secondary" onClick={onTrans} style={{marginBottom:8,width:'100%'}}>📋 View &amp; Edit Transactions</button>
+      <MFASection toast_={toast_}/>
       <div className="tab-pills">
         <button className={`tab-pill${sub==='banks'?' active':''}`} onClick={()=>setSub('banks')}>🏦 Banks</button>
         <button className={`tab-pill${sub==='income'?' active':''}`} onClick={()=>setSub('income')}>Income</button>
