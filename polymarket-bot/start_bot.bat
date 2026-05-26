@@ -1,8 +1,7 @@
 @echo off
-title PolyBot — Starting...
+title Polymarket Trading — Starting...
 cd /d "%~dp0"
 
-:: Check if .env exists
 if not exist ".env" (
     echo ERROR: .env file not found.
     echo Copy .env.template to .env and fill in your values first.
@@ -10,18 +9,22 @@ if not exist ".env" (
     exit /b 1
 )
 
-:: Start the dashboard server silently in the background
-echo Starting dashboard server...
+echo Starting Polymarket Trading...
+
+:: Dashboard server (background, minimized)
 start "" /min pythonw server.py
 
-:: Small delay so server is ready
+:: Wait for server to be ready
 timeout /t 2 /nobreak >nul
 
-:: Open browser to dashboard
+:: System tray icon (background)
+start "" /min pythonw tray.py
+
+:: Open browser dashboard
 start "" http://localhost:5000
 
-:: Start the bot in this window
-title PolyBot — Running
+:: Run the trading bot (this window stays open — close it to stop the bot)
+title Polymarket Trading — Running
 python main.py
 
 pause

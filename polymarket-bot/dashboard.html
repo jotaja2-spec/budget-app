@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PolyBot Dashboard</title>
+  <title>Polymarket Trading</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -121,6 +121,25 @@
       gap: 12px; padding: 16px 24px;
     }
     @media (max-width: 900px) { .panels { grid-template-columns: 1fr; } }
+    @media (max-width: 600px) {
+      header { padding: 10px 14px; }
+      header h1 { font-size: 14px; }
+      .grid { grid-template-columns: 1fr 1fr; padding: 12px 14px 0; gap: 8px; }
+      .panels { padding: 12px 14px; gap: 8px; }
+      .stat-card { padding: 12px; }
+      .stat-card .value { font-size: 18px; }
+      td, th { padding: 8px 10px; font-size: 11px; }
+      #btn-shutdown { padding: 5px 10px; font-size: 10px; }
+    }
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    /* Phone access banner */
+    #phone-banner {
+      display: none; text-align: center; padding: 8px 16px;
+      margin: 10px 24px 0; border-radius: 8px;
+      background: #0f1f2e; border: 1px solid #1e3a5f;
+      color: #7dd3fc; font-size: 11px;
+    }
+    #phone-banner a { color: var(--accent); text-decoration: none; font-weight: 600; }
     .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
     .panel-full { grid-column: 1 / -1; }
     .panel-header {
@@ -211,7 +230,7 @@
 </div>
 
 <header>
-  <h1>⬡ PolyBot Dashboard</h1>
+  <h1>⬡ Polymarket Trading</h1>
   <div class="header-right">
     <span>
       <span id="bot-status-dot" class="stopped"></span>
@@ -222,6 +241,10 @@
     <button id="btn-shutdown" onclick="openModal()">■ Shutdown</button>
   </div>
 </header>
+
+<div id="phone-banner">
+  📱 Phone access (same WiFi): <a id="phone-link" href="#">loading…</a>
+</div>
 
 <div id="no-data-banner" class="banner">
   Bot hasn't run yet — start it with <strong>Start PolyBot</strong>, then this will update automatically.
@@ -276,7 +299,7 @@
       Open Positions
       <span class="count" id="positions-count">0</span>
     </div>
-    <div id="positions-body"><div class="empty">No open positions</div></div>
+    <div class="table-wrap" id="positions-body"><div class="empty">No open positions</div></div>
   </div>
 
   <div class="panel">
@@ -284,7 +307,7 @@
       Recent Trades
       <span class="count" id="trades-count">0</span>
     </div>
-    <div id="trades-body"><div class="empty">No trades yet</div></div>
+    <div class="table-wrap" id="trades-body"><div class="empty">No trades yet</div></div>
   </div>
 
   <div class="panel panel-full">
@@ -507,6 +530,21 @@
   async function refresh() {
     await Promise.all([fetchStatus(), fetchPositions(), fetchTrades(), fetchLogs()]);
   }
+
+  // Show phone access URL
+  (async () => {
+    try {
+      const r = await fetch('/api/info');
+      const d = await r.json();
+      if (d.local_ip && d.local_ip !== 'localhost') {
+        const url = `http://${d.local_ip}:${d.port}`;
+        const link = $('phone-link');
+        link.textContent = url;
+        link.href = url;
+        $('phone-banner').style.display = 'block';
+      }
+    } catch(_) {}
+  })();
 
   refresh();
   setInterval(refresh, 10000);

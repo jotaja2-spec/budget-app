@@ -8,6 +8,7 @@ import json
 import os
 import re
 import signal
+import socket
 import threading
 import psutil
 from flask import Flask, jsonify, send_from_directory, request
@@ -178,6 +179,24 @@ def api_logs():
     return jsonify(lines)
 
 
+def _local_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "localhost"
+
+
+@app.route("/api/info")
+def api_info():
+    return jsonify({"local_ip": _local_ip(), "port": 5000})
+
+
 if __name__ == "__main__":
-    print("Dashboard running at http://localhost:5000")
+    ip = _local_ip()
+    print(f"Dashboard running at http://localhost:5000")
+    print(f"Phone access (same WiFi): http://{ip}:5000")
     app.run(host="0.0.0.0", port=5000, debug=False)
