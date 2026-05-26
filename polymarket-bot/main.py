@@ -54,6 +54,8 @@ def _cpu_check() -> bool:
     return True
 from scanner import get_weather_markets
 from signals import generate_signals
+from economic_scanner import get_economic_markets
+from economic_signals import generate_economic_signals
 from sizing import kelly_size
 from risk import RiskManager
 from paper_trading import PaperTrader
@@ -105,14 +107,22 @@ def run_scan_cycle(paper_trader: PaperTrader, risk: RiskManager):
         bot_logger.info(f"No trading: {reason}")
         return
 
-    markets = get_weather_markets()
-    if not markets:
-        bot_logger.info("No weather markets found this scan")
+    weather_markets = get_weather_markets()
+    econ_markets    = get_economic_markets()
+
+    all_signals = []
+    if weather_markets:
+        all_signals.extend(generate_signals(weather_markets))
+    if econ_markets:
+        all_signals.extend(generate_economic_signals(econ_markets))
+
+    if not weather_markets and not econ_markets:
+        bot_logger.info("No markets found this scan")
         return
 
-    signals = generate_signals(markets)
+    signals = sorted(all_signals, key=lambda s: s["edge"], reverse=True)
     if not signals:
-        bot_logger.info("No signals above edge threshold this scan")
+        bot_logger.info("No signals above edge threshold this scan (weather + economic)")
         return
 
     bot_logger.info(f"{len(signals)} signal(s) found — evaluating top opportunities")

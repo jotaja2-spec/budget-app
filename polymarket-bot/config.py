@@ -60,6 +60,11 @@ POLY_CHAIN_ID = int(os.getenv("POLY_CHAIN_ID", "137"))
 PUSHOVER_API_TOKEN = os.getenv("PUSHOVER_API_TOKEN", "")
 PUSHOVER_USER_KEY = os.getenv("PUSHOVER_USER_KEY", "")
 
+# FRED API key (free — https://fred.stlouisfed.org/docs/api/api_key.html)
+# Enables CPI, unemployment, and GDP market trading.
+# Fed rate markets work without this (uses CME FedWatch).
+FRED_API_KEY = os.getenv("FRED_API_KEY", "")
+
 # API endpoints
 GAMMA_API_URL = "https://gamma-api.polymarket.com"
 CLOB_API_URL = "https://clob.polymarket.com"
