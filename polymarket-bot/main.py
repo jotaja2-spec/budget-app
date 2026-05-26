@@ -5,12 +5,53 @@ Run with:   python main.py
 Background: pythonw main.py   (Windows, no terminal window)
 """
 
+import os
 import time
 import sys
+import signal
 from datetime import datetime
+
+import psutil
 
 import config
 from logger import bot_logger, log_error
+
+BASE = os.path.dirname(__file__)
+PID_FILE = os.path.join(BASE, "bot.pid")
+
+# CPU thresholds
+CPU_WARN_PCT = 60
+CPU_THROTTLE_PCT = 80
+
+
+def _write_pid():
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+
+def _remove_pid():
+    try:
+        os.remove(PID_FILE)
+    except FileNotFoundError:
+        pass
+
+
+def _cpu_check() -> bool:
+    """
+    Returns True if safe to scan.
+    At 60–80% CPU logs a warning but proceeds.
+    Above 80% skips the scan entirely for one cycle.
+    """
+    usage = psutil.cpu_percent(interval=1)
+    if usage >= CPU_THROTTLE_PCT:
+        bot_logger.warning(
+            f"CPU at {usage:.0f}% — skipping scan to avoid overloading system "
+            f"(threshold: {CPU_THROTTLE_PCT}%)"
+        )
+        return False
+    if usage >= CPU_WARN_PCT:
+        bot_logger.warning(f"CPU at {usage:.0f}% — proceeding but load is elevated")
+    return True
 from scanner import get_weather_markets
 from signals import generate_signals
 from sizing import kelly_size
@@ -47,6 +88,9 @@ def print_status(paper_trader: PaperTrader, risk: RiskManager):
 
 
 def run_scan_cycle(paper_trader: PaperTrader, risk: RiskManager):
+    if not _cpu_check():
+        return
+
     risk.reset_for_new_day()
 
     if risk.is_halted:
@@ -120,9 +164,22 @@ def run_scan_cycle(paper_trader: PaperTrader, risk: RiskManager):
                 bot_logger.warning(f"Live order failed for {market['id']}")
 
 
+def _shutdown(signum=None, frame=None):
+    bot_logger.info("Bot shutting down")
+    _remove_pid()
+    sys.exit(0)
+
+
 def main():
+    _write_pid()
+    signal.signal(signal.SIGTERM, _shutdown)
+
     mode = "PAPER TRADING" if config.PAPER_TRADING else "LIVE TRADING"
-    bot_logger.info(f"Bot starting — {mode} | bankroll=${config.STARTING_BANKROLL:.2f}")
+    cpu_now = psutil.cpu_percent(interval=1)
+    bot_logger.info(
+        f"Bot starting — {mode} | bankroll=${config.STARTING_BANKROLL:.2f} | "
+        f"CPU at start: {cpu_now:.0f}%"
+    )
 
     paper_trader = PaperTrader(config.STARTING_BANKROLL)
     risk = RiskManager(
@@ -133,28 +190,26 @@ def main():
     print_status(paper_trader, risk)
 
     scan_num = 0
-    while True:
-        scan_num += 1
-        bot_logger.info(f"--- Scan #{scan_num} ---")
+    try:
+        while True:
+            scan_num += 1
+            bot_logger.info(f"--- Scan #{scan_num} | CPU {psutil.cpu_percent():.0f}% ---")
 
-        try:
-            run_scan_cycle(paper_trader, risk)
-        except KeyboardInterrupt:
-            bot_logger.info("Bot stopped by user")
-            print("\nBot stopped.")
-            sys.exit(0)
-        except Exception as e:
-            log_error("Unhandled error in scan cycle", e)
+            try:
+                run_scan_cycle(paper_trader, risk)
+            except Exception as e:
+                log_error("Unhandled error in scan cycle", e)
 
-        print_status(paper_trader, risk)
+            print_status(paper_trader, risk)
 
-        bot_logger.info(f"Sleeping {config.SCAN_INTERVAL_SECONDS}s until next scan...")
-        try:
+            bot_logger.info(f"Sleeping {config.SCAN_INTERVAL_SECONDS}s until next scan...")
             time.sleep(config.SCAN_INTERVAL_SECONDS)
-        except KeyboardInterrupt:
-            bot_logger.info("Bot stopped by user")
-            print("\nBot stopped.")
-            sys.exit(0)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        bot_logger.info("Bot stopped")
+        _remove_pid()
+        print("\nBot stopped.")
 
 
 if __name__ == "__main__":

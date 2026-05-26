@@ -7,15 +7,19 @@ Then open: http://localhost:5000
 import json
 import os
 import re
-from flask import Flask, jsonify, send_from_directory
+import signal
+import threading
+import psutil
+from flask import Flask, jsonify, send_from_directory, request
 
 app = Flask(__name__, static_folder=".")
 
 BASE = os.path.dirname(__file__)
 PAPER_STATE = os.path.join(BASE, "paper_state.json")
-RISK_STATE = os.path.join(BASE, "risk_state.json")
-BOT_LOG = os.path.join(BASE, "logs", "bot.log")
-TRADE_LOG = os.path.join(BASE, "logs", "trades.log")
+RISK_STATE  = os.path.join(BASE, "risk_state.json")
+PID_FILE    = os.path.join(BASE, "bot.pid")
+BOT_LOG     = os.path.join(BASE, "logs", "bot.log")
+TRADE_LOG   = os.path.join(BASE, "logs", "trades.log")
 
 
 def _read_json(path: str) -> dict:
@@ -85,13 +89,27 @@ def index():
     return send_from_directory(".", "dashboard.html")
 
 
+def _bot_running() -> bool:
+    if not os.path.exists(PID_FILE):
+        return False
+    try:
+        with open(PID_FILE) as f:
+            pid = int(f.read().strip())
+        return psutil.pid_exists(pid)
+    except Exception:
+        return False
+
+
 @app.route("/api/status")
 def api_status():
     paper = _read_json(PAPER_STATE)
-    risk = _read_json(RISK_STATE)
+    risk  = _read_json(RISK_STATE)
 
     starting = paper.get("starting_bankroll", 100.0)
     bankroll = paper.get("bankroll", starting)
+
+    cpu = psutil.cpu_percent(interval=None)
+    mem = psutil.virtual_memory()
 
     return jsonify({
         "mode": "PAPER" if not paper else ("LIVE" if paper.get("live") else "PAPER"),
@@ -105,7 +123,41 @@ def api_status():
         "halted": risk.get("halted", False),
         "date": risk.get("date", "—"),
         "has_data": bool(paper),
+        "bot_running": _bot_running(),
+        "cpu_pct": round(cpu, 1),
+        "mem_pct": round(mem.percent, 1),
     })
+
+
+@app.route("/api/shutdown", methods=["POST"])
+def api_shutdown():
+    """Kill the bot process, then shut down the server."""
+    bot_killed = False
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE) as f:
+                pid = int(f.read().strip())
+            proc = psutil.Process(pid)
+            proc.terminate()
+            proc.wait(timeout=5)
+            os.remove(PID_FILE)
+            bot_killed = True
+        except psutil.NoSuchProcess:
+            bot_killed = True  # already gone
+            try:
+                os.remove(PID_FILE)
+            except FileNotFoundError:
+                pass
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    def _stop_server():
+        import time as _time
+        _time.sleep(0.4)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    threading.Thread(target=_stop_server, daemon=True).start()
+    return jsonify({"status": "shutting_down", "bot_killed": bot_killed})
 
 
 @app.route("/api/positions")
