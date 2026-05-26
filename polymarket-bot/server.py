@@ -1,0 +1,131 @@
+"""
+Dashboard server — serves the web UI and a JSON API backed by the bot's state files.
+Run with: python server.py
+Then open: http://localhost:5000
+"""
+
+import json
+import os
+import re
+from flask import Flask, jsonify, send_from_directory
+
+app = Flask(__name__, static_folder=".")
+
+BASE = os.path.dirname(__file__)
+PAPER_STATE = os.path.join(BASE, "paper_state.json")
+RISK_STATE = os.path.join(BASE, "risk_state.json")
+BOT_LOG = os.path.join(BASE, "logs", "bot.log")
+TRADE_LOG = os.path.join(BASE, "logs", "trades.log")
+
+
+def _read_json(path: str) -> dict:
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        return {}
+
+
+def _tail(path: str, n: int = 100) -> list[str]:
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            buf = b""
+            pos = size
+            lines_found = 0
+            chunk = 4096
+            while pos > 0 and lines_found < n + 1:
+                read_size = min(chunk, pos)
+                pos -= read_size
+                f.seek(pos)
+                buf = f.read(read_size) + buf
+                lines_found = buf.count(b"\n")
+            lines = buf.decode("utf-8", errors="replace").splitlines()
+            return lines[-n:] if len(lines) >= n else lines
+    except FileNotFoundError:
+        return []
+    except Exception:
+        return []
+
+
+def _parse_trade_lines(lines: list[str]) -> list[dict]:
+    trades = []
+    # Format: 2025-07-04 10:00:00 | INFO     | TRADE | mode=PAPER city=... market=... direction=... price=... size=$... edge=... | reason
+    pattern = re.compile(
+        r"(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
+        r".*?TRADE \| mode=(?P<mode>\S+) city=(?P<city>[^m]+?) market=(?P<market>\S+)"
+        r" direction=(?P<direction>\S+) price=(?P<price>[\d.]+) size=\$(?P<size>[\d.]+)"
+        r" edge=(?P<edge>[+-][\d.]+)"
+        r".*?\| (?P<reason>.+)$"
+    )
+    for line in reversed(lines):
+        m = pattern.search(line)
+        if m:
+            trades.append({
+                "ts": m.group("ts"),
+                "mode": m.group("mode"),
+                "city": m.group("city").strip(),
+                "market": m.group("market"),
+                "direction": m.group("direction"),
+                "price": float(m.group("price")),
+                "size": float(m.group("size")),
+                "edge": float(m.group("edge")),
+                "reason": m.group("reason"),
+            })
+        if len(trades) >= 50:
+            break
+    return trades
+
+
+@app.route("/")
+def index():
+    return send_from_directory(".", "dashboard.html")
+
+
+@app.route("/api/status")
+def api_status():
+    paper = _read_json(PAPER_STATE)
+    risk = _read_json(RISK_STATE)
+
+    starting = paper.get("starting_bankroll", 100.0)
+    bankroll = paper.get("bankroll", starting)
+
+    return jsonify({
+        "mode": "PAPER" if not paper else ("LIVE" if paper.get("live") else "PAPER"),
+        "bankroll": round(bankroll, 2),
+        "starting_bankroll": round(starting, 2),
+        "net_pnl": round(bankroll - starting, 2),
+        "realized_pnl": round(paper.get("realized_pnl", 0), 2),
+        "total_trades": paper.get("total_trades", 0),
+        "open_positions": len(paper.get("open_positions", [])),
+        "daily_pnl": round(risk.get("daily_pnl", 0), 2),
+        "halted": risk.get("halted", False),
+        "date": risk.get("date", "—"),
+        "has_data": bool(paper),
+    })
+
+
+@app.route("/api/positions")
+def api_positions():
+    paper = _read_json(PAPER_STATE)
+    return jsonify(paper.get("open_positions", []))
+
+
+@app.route("/api/trades")
+def api_trades():
+    lines = _tail(TRADE_LOG, 200)
+    return jsonify(_parse_trade_lines(lines))
+
+
+@app.route("/api/logs")
+def api_logs():
+    lines = _tail(BOT_LOG, 60)
+    return jsonify(lines)
+
+
+if __name__ == "__main__":
+    print("Dashboard running at http://localhost:5000")
+    app.run(host="0.0.0.0", port=5000, debug=False)
