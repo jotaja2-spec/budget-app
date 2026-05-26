@@ -42,7 +42,7 @@ def _cpu_check() -> bool:
     At 60–80% CPU logs a warning but proceeds.
     Above 80% skips the scan entirely for one cycle.
     """
-    usage = psutil.cpu_percent(interval=1)
+    usage = psutil.cpu_percent(interval=None)
     if usage >= CPU_THROTTLE_PCT:
         bot_logger.warning(
             f"CPU at {usage:.0f}% — skipping scan to avoid overloading system "
@@ -175,7 +175,7 @@ def main():
     signal.signal(signal.SIGTERM, _shutdown)
 
     mode = "PAPER TRADING" if config.PAPER_TRADING else "LIVE TRADING"
-    cpu_now = psutil.cpu_percent(interval=1)
+    cpu_now = psutil.cpu_percent(interval=None)
     bot_logger.info(
         f"Bot starting — {mode} | bankroll=${config.STARTING_BANKROLL:.2f} | "
         f"CPU at start: {cpu_now:.0f}%"

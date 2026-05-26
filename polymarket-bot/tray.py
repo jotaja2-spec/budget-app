@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 BASE        = os.path.dirname(os.path.abspath(__file__))
 STATUS_URL  = "http://localhost:5000/api/status"
-POLL_SECS   = 15
+POLL_SECS   = 30
 
 _state = {"status": None, "icon": None}
 
@@ -103,12 +103,19 @@ def _quit_tray(icon, _=None):
 # ── Polling thread ────────────────────────────────────────────────────────────
 
 def _poll(icon: pystray.Icon):
+    last_state_key = None
+    last_tooltip   = None
     while True:
-        s = _fetch()
+        s         = _fetch()
         _state["status"] = s
         state_key = _icon_state(s)
-        icon.icon    = ICONS[state_key]
-        icon.title   = _tooltip(s)
+        tooltip   = _tooltip(s)
+        if state_key != last_state_key:
+            icon.icon      = ICONS[state_key]
+            last_state_key = state_key
+        if tooltip != last_tooltip:
+            icon.title  = tooltip
+            last_tooltip = tooltip
         time.sleep(POLL_SECS)
 
 
