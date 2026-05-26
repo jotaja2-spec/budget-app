@@ -2,11 +2,7 @@
 
 ## What you need before starting
 
-### 1. Python 3.11 or newer
-Download from https://www.python.org/downloads/
-During install, check **"Add Python to PATH"**.
-
-### 2. Your Polymarket private key
+### 1. Your Polymarket private key
 This is the private key for the crypto wallet linked to your Polymarket account.
 
 To find it:
@@ -16,7 +12,7 @@ To find it:
 
 > **Keep this safe — it controls your wallet.**
 
-### 3. (Optional) Pushover for phone notifications
+### 2. (Optional) Pushover for phone notifications
 If you want push alerts when the bot trades:
 1. Install the Pushover app on your phone (iOS/Android)
 2. Sign up at pushover.net
