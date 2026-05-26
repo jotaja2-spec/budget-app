@@ -1,0 +1,8 @@
+.env
+logs/
+paper_state.json
+risk_state.json
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
