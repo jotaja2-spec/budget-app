@@ -299,8 +299,8 @@
     <div id="cpu-bar" class="cpu-bar" style="width:0%;background:var(--green)"></div>
   </div>
   <div class="stat-card">
-    <div class="label">RAM Usage</div>
-    <div class="value neu" id="stat-mem">—</div>
+    <div class="label">CPU Temp</div>
+    <div class="value neu" id="stat-temp">—</div>
   </div>
 </div>
 
@@ -454,25 +454,28 @@
       cpuBar.style.width = `${cpu}%`;
       cpuBar.style.background = cpuColor(cpu);
 
-      // RAM
-      const mem = d.mem_pct ?? 0;
-      const memEl = $('stat-mem');
-      memEl.className = 'value ' + (mem >= 85 ? 'neg' : mem >= 70 ? 'warn' : 'neu');
-      memEl.textContent = `${mem.toFixed(0)}%`;
-
       $('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
 
-      // CPU temperature badge
+      // CPU temperature — stat card + header badge
       const tempBadge = $('cpu-temp-badge');
+      const tempCard  = $('stat-temp');
       if (d.cpu_temp != null) {
         const t = d.cpu_temp;
-        tempBadge.textContent = `🌡 ${t.toFixed(0)}°C`;
-        tempBadge.style.display = 'inline';
-        tempBadge.className =
+        const tempClass =
+          t >= 90 ? 'neg' :
+          t >= 80 ? 'neg' :
+          t >= 70 ? 'warn' : 'pos';
+        const badgeClass =
           t >= 90 ? 'temp-danger' :
           t >= 80 ? 'temp-hot' :
           t >= 70 ? 'temp-warm' : 'temp-ok';
+        tempCard.className = `value ${tempClass}`;
+        tempCard.textContent = `${t.toFixed(0)}°C`;
+        tempBadge.textContent = `🌡 ${t.toFixed(0)}°C`;
+        tempBadge.style.display = 'inline';
+        tempBadge.className = badgeClass;
       } else {
+        tempCard.textContent = 'N/A';
         tempBadge.style.display = 'none';
       }
     } catch(e) {
