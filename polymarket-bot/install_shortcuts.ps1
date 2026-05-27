@@ -1,14 +1,16 @@
 # install_shortcuts.ps1
 # Run this ONCE from PowerShell to create desktop shortcuts.
-# Right-click the file → "Run with PowerShell"
+# Right-click the file -> "Run with PowerShell"
 
 $botDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $desktop = [Environment]::GetFolderPath("Desktop")
 $wsh     = New-Object -ComObject WScript.Shell
 
 # --- Find Python icon ---
-$pythonExe = (Get-Command python -ErrorAction SilentlyContinue)?.Source
-if (-not $pythonExe) {
+$pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+if ($pythonCmd) {
+    $pythonExe = $pythonCmd.Source
+} else {
     $pythonExe = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
 }
 $pythonIcon = if (Test-Path $pythonExe) { "$pythonExe,0" } else { "shell32.dll,1" }
@@ -33,7 +35,7 @@ $s2.Description      = "Open Polymarket Trading in a desktop app window"
 $s2.Save()
 Write-Host "Created: Polymarket Trading App" -ForegroundColor Green
 
-# --- Shortcut 3: Polymarket Trading Dashboard (browser) ---
+# --- Shortcut 3: Polymarket Dashboard (browser) ---
 $s3 = $wsh.CreateShortcut("$desktop\Polymarket Dashboard.lnk")
 $s3.TargetPath       = "$botDir\open_dashboard.bat"
 $s3.WorkingDirectory = $botDir
@@ -43,8 +45,19 @@ $s3.Description      = "Open Polymarket Trading dashboard in browser"
 $s3.Save()
 Write-Host "Created: Polymarket Dashboard" -ForegroundColor Green
 
+# --- Shortcut 4: Kill All ---
+$s4 = $wsh.CreateShortcut("$desktop\Stop Polymarket Trading.lnk")
+$s4.TargetPath       = "$botDir\kill_all.bat"
+$s4.WorkingDirectory = $botDir
+$s4.WindowStyle      = 1
+$s4.IconLocation     = "shell32.dll,131"
+$s4.Description      = "Stop all Polymarket Trading processes immediately"
+$s4.Save()
+Write-Host "Created: Stop Polymarket Trading" -ForegroundColor Red
+
 Write-Host ""
-Write-Host "Done! Three shortcuts added to your desktop:" -ForegroundColor Cyan
-Write-Host "  Start Polymarket Trading    — launches bot + tray icon + browser dashboard"
-Write-Host "  Polymarket Trading App      — opens desktop app window (bot must be running)"
-Write-Host "  Polymarket Dashboard        — opens browser dashboard (bot must be running)"
+Write-Host "Done! Four shortcuts added to your desktop:" -ForegroundColor Cyan
+Write-Host "  Start Polymarket Trading   - launches bot + tray icon + browser dashboard"
+Write-Host "  Polymarket Trading App     - opens desktop app window (bot must be running)"
+Write-Host "  Polymarket Dashboard       - opens browser dashboard (bot must be running)"
+Write-Host "  Stop Polymarket Trading    - kills everything immediately"
