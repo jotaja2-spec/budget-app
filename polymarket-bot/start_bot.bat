@@ -1,6 +1,7 @@
 @echo off
 title Polymarket Trading — Starting...
 cd /d "%~dp0"
+set PYTHON=C:\Users\joshj\AppData\Local\Programs\Python\Python312\python.exe
 
 if not exist ".env" (
     echo ERROR: .env file not found.
@@ -9,22 +10,25 @@ if not exist ".env" (
     exit /b 1
 )
 
-echo Starting Polymarket Trading...
+echo Starting Polymarket Trading in background...
 
 :: Dashboard server (background, minimized)
-start "" /min pythonw server.py
+start "" /min "%PYTHON%" server.py
 
 :: Wait for server to be ready
 timeout /t 2 /nobreak >nul
 
 :: System tray icon (background)
-start "" /min pythonw tray.py
+start "" /min "%PYTHON%" tray.py
 
-:: Open browser dashboard
-start "" http://localhost:5000
+:: Wait a moment then start bot fully hidden
+timeout /t 1 /nobreak >nul
 
-:: Run the trading bot (this window stays open — close it to stop the bot)
-title Polymarket Trading — Running
-python main.py
+:: Trading bot (background, minimized — right-click tray icon to open dashboard)
+start "" /min "%PYTHON%" main.py
 
-pause
+echo.
+echo Polymarket Trading is running in the background.
+echo Check your system tray (bottom-right) for the hexagon icon.
+echo Right-click the icon to open the dashboard.
+timeout /t 4 /nobreak >nul
