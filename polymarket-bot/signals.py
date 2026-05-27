@@ -54,7 +54,9 @@ def evaluate_market(market: dict) -> Optional[dict]:
         bot_logger.debug(f"SKIP {market['id']} — could not parse end_date '{market.get('end_date')}'")
         return None
 
-    forecast_prob = get_forecast_probability(city, target_date, threshold_f, yes_if)
+    threshold_f_upper = market.get("threshold_f_upper")
+    forecast_prob = get_forecast_probability(city, target_date, threshold_f, yes_if,
+                                             threshold_f_upper=threshold_f_upper)
     if forecast_prob is None:
         return None
 

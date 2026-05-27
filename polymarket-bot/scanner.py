@@ -48,7 +48,8 @@ def _match_city(text: str) -> Optional[str]:
     t = text.lower().strip()
     for city_name, city_data in config.CITIES.items():
         for alias in city_data["aliases"]:
-            if alias == t or alias in t:
+            # Exact match OR whole-word match — prevents "la" matching "manila"
+            if alias == t or re.search(r"\b" + re.escape(alias) + r"\b", t):
                 return city_name
     return None
 
@@ -166,12 +167,12 @@ def get_weather_markets() -> list[dict]:
                 elif bracket == "or below":
                     yes_if = "below"
                 else:
-                    # Exact bucket — only trade if price is not at an extreme
+                    # Exact bucket: P(X-0.5°C < temp ≤ X+0.5°C)
                     yes_price_raw, _ = _parse_prices(mkt)
                     if yes_price_raw is None or yes_price_raw < 0.02 or yes_price_raw > 0.98:
                         continue
-                    yes_if = "above"  # treat as above lower bound (threshold - 0.5°C)
-                    threshold_f = _celsius_to_f(threshold_c - 0.5)
+                    yes_if = "exact"
+                    threshold_f = _celsius_to_f(threshold_c - 0.5)   # lower bound
 
                 yes_price, no_price = _parse_prices(mkt)
                 if yes_price is None:
@@ -184,14 +185,18 @@ def get_weather_markets() -> list[dict]:
                 end_date = mkt.get("endDate", "") or _parse_end_date(question)
                 token_yes, token_no = _parse_token_ids(mkt)
 
+                # Upper bound for exact bucket markets
+                threshold_f_upper = _celsius_to_f(threshold_c + 0.5) if yes_if == "exact" else None
+
                 results.append({
-                    "id":           mkt.get("id", ""),
-                    "condition_id": mkt.get("conditionId", ""),
-                    "question":     question,
-                    "city":         city,
-                    "threshold_f":  round(threshold_f, 2),
-                    "threshold_c":  threshold_c,
-                    "yes_if":       yes_if,
+                    "id":              mkt.get("id", ""),
+                    "condition_id":    mkt.get("conditionId", ""),
+                    "question":        question,
+                    "city":            city,
+                    "threshold_f":     round(threshold_f, 2),
+                    "threshold_f_upper": threshold_f_upper,
+                    "threshold_c":     threshold_c,
+                    "yes_if":          yes_if,
                     "yes_price":    yes_price,
                     "no_price":     no_price if no_price is not None else round(1 - yes_price, 4),
                     "liquidity":    liquidity,

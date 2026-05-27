@@ -112,9 +112,12 @@ def fetch_ensemble_highs(city: str, target_date: date) -> Optional[list[float]]:
     return highs
 
 
-def calc_probability(highs: list[float], threshold_f: float, yes_if: str) -> float:
+def calc_probability(highs: list[float], threshold_f: float, yes_if: str,
+                     threshold_f_upper: float = None) -> float:
     """
-    yes_if: 'above' → P(high > threshold), 'below' → P(high < threshold)
+    yes_if: 'above'  → P(high > threshold_f)
+            'below'  → P(high < threshold_f)
+            'exact'  → P(threshold_f < high <= threshold_f_upper)
     Returns probability in [0, 1].
     """
     if not highs:
@@ -122,19 +125,23 @@ def calc_probability(highs: list[float], threshold_f: float, yes_if: str) -> flo
 
     if yes_if == "above":
         count = sum(1 for h in highs if h > threshold_f)
+    elif yes_if == "exact" and threshold_f_upper is not None:
+        count = sum(1 for h in highs if threshold_f < h <= threshold_f_upper)
     else:
         count = sum(1 for h in highs if h < threshold_f)
 
     return count / len(highs)
 
 
-def get_forecast_probability(city: str, target_date: date, threshold_f: float, yes_if: str) -> Optional[float]:
+def get_forecast_probability(city: str, target_date: date, threshold_f: float,
+                             yes_if: str, threshold_f_upper: float = None) -> Optional[float]:
     """
     Full pipeline: fetch ensemble → calculate probability.
+    For yes_if='exact', pass threshold_f as lower bound and threshold_f_upper as upper bound.
     Returns None if data unavailable.
     """
     highs = fetch_ensemble_highs(city, target_date)
     if highs is None:
         return None
-    prob = calc_probability(highs, threshold_f, yes_if)
+    prob = calc_probability(highs, threshold_f, yes_if, threshold_f_upper)
     return prob
