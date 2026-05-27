@@ -10,6 +10,7 @@ import re
 import signal
 import socket
 import threading
+import time
 import psutil
 from flask import Flask, jsonify, send_from_directory, request
 
@@ -22,6 +23,83 @@ PID_FILE    = os.path.join(BASE, "bot.pid")
 TRAY_PID    = os.path.join(BASE, "tray.pid")
 BOT_LOG     = os.path.join(BASE, "logs", "bot.log")
 TRADE_LOG   = os.path.join(BASE, "logs", "trades.log")
+
+# ── Health monitor settings ───────────────────────────────────────────────────
+MONITOR_INTERVAL_SECS = 120   # check every 2 minutes
+RAM_WARN_SYSTEM_PCT   = 90    # alert if system RAM exceeds this %
+RAM_WARN_BOT_MB       = 400   # alert if bot process exceeds this MB
+ALERT_COOLDOWN_SECS   = 1800  # max one alert per type per 30 minutes
+
+_monitor = {
+    "bot_was_running":    False,
+    "shutdown_requested": False,
+    "last_ram_alert":     0.0,
+    "last_crash_alert":   0.0,
+}
+
+
+def _send_alert(title: str, message: str):
+    """Send a push notification that bypasses quiet hours."""
+    try:
+        from notifications import send_notification
+        send_notification(title, message, priority=1, force=True)
+    except Exception:
+        pass
+
+
+def _health_monitor():
+    """Background thread: watches for bot crashes and high RAM usage."""
+    # Give the bot a moment to start before we begin watching
+    time.sleep(30)
+    while True:
+        now = time.time()
+
+        # ── Crash detection ──────────────────────────────────────────────────
+        currently_running = _bot_running()
+        if (
+            _monitor["bot_was_running"]
+            and not currently_running
+            and not _monitor["shutdown_requested"]
+            and now - _monitor["last_crash_alert"] > ALERT_COOLDOWN_SECS
+        ):
+            _monitor["last_crash_alert"] = now
+            _send_alert(
+                "⚠️ Polymarket Bot Stopped",
+                "The trading bot stopped unexpectedly.\n"
+                "Check the dashboard logs to see what happened.\n"
+                "Restart with 'Start Polymarket Trading' on your desktop.",
+            )
+        _monitor["bot_was_running"] = currently_running
+
+        # ── RAM warning ─────────────────────────────────────────────────────
+        if now - _monitor["last_ram_alert"] > ALERT_COOLDOWN_SECS:
+            # System RAM
+            mem = psutil.virtual_memory()
+            if mem.percent >= RAM_WARN_SYSTEM_PCT:
+                _monitor["last_ram_alert"] = now
+                _send_alert(
+                    "⚠️ High RAM Usage",
+                    f"System RAM is at {mem.percent:.0f}%.\n"
+                    "Consider closing other applications or restarting the bot.",
+                )
+
+            # Bot process RAM
+            elif os.path.exists(PID_FILE):
+                try:
+                    with open(PID_FILE) as f:
+                        pid = int(f.read().strip())
+                    bot_mb = psutil.Process(pid).memory_info().rss / (1024 * 1024)
+                    if bot_mb >= RAM_WARN_BOT_MB:
+                        _monitor["last_ram_alert"] = now
+                        _send_alert(
+                            "⚠️ Bot Using Too Much RAM",
+                            f"The bot is using {bot_mb:.0f}MB of RAM.\n"
+                            "Restart it with 'Stop' then 'Start Polymarket Trading'.",
+                        )
+                except Exception:
+                    pass
+
+        time.sleep(MONITOR_INTERVAL_SECS)
 
 
 def _read_json(path: str) -> dict:
@@ -155,6 +233,7 @@ def _kill_pid_file(path: str) -> bool:
 @app.route("/api/shutdown", methods=["POST"])
 def api_shutdown():
     """Kill bot, tray, and any app window, then shut down the server."""
+    _monitor["shutdown_requested"] = True  # prevents crash alert firing
     _kill_pid_file(PID_FILE)   # trading bot
     _kill_pid_file(TRAY_PID)   # system tray
 
@@ -211,6 +290,7 @@ def api_info():
 
 
 if __name__ == "__main__":
+    threading.Thread(target=_health_monitor, daemon=True).start()
     ip = _local_ip()
     print(f"Dashboard running at http://localhost:5000")
     print(f"Phone access (same WiFi): http://{ip}:5000")
