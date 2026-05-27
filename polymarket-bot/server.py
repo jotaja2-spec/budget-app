@@ -28,51 +28,65 @@ _cached_cpu_temp   = None        # updated by background thread
 
 def _read_cpu_temp() -> float | None:
     """
-    Read CPU temperature on Windows. Tries three methods in order:
-    1. WMI MSAcpi_ThermalZoneTemperature
-    2. PowerShell subprocess (same data, different path)
-    3. OpenHardwareMonitor WMI (if OHM is running)
-    Returns °C or None if no method works on this hardware.
+    Read CPU temperature via HWiNFO64 shared memory.
+    Requires HWiNFO64 running with Shared Memory Support enabled
+    (Settings -> Sensors -> Shared Memory Support).
     """
-    # Method 1: WMI thermal zone
-    try:
-        import wmi
-        w = wmi.WMI(namespace="root\\wmi")
-        zones = w.MSAcpi_ThermalZoneTemperature()
-        if zones:
-            celsius = [(z.CurrentTemperature / 10) - 273.15 for z in zones
-                       if 0 < (z.CurrentTemperature / 10) - 273.15 < 150]
-            if celsius:
-                return round(max(celsius), 1)
-    except Exception:
-        pass
+    HWINFO_SM_NAME    = "Global\\HWiNFO_SENS_SM2"
+    HWINFO_SM_SIZE    = 1 * 1024 * 1024   # 1 MB buffer
+    HWINFO_SIGNATURE  = 0x53697748        # 'HWiS'
+    READING_TYPE_TEMP = 1
+    SENSOR_STR        = 128
+    UNIT_STR          = 16
 
-    # Method 2: PowerShell WMIC fallback
     try:
-        import subprocess
-        out = subprocess.check_output(
-            ['powershell', '-NoProfile', '-Command',
-             '(Get-WmiObject -Namespace root\\wmi '
-             '-Class MSAcpi_ThermalZoneTemperature).CurrentTemperature'],
-            timeout=5, stderr=subprocess.DEVNULL, text=True
-        ).strip()
-        values = [float(v) for v in out.splitlines() if v.strip().lstrip('-').replace('.','').isdigit()]
-        celsius = [(v / 10) - 273.15 for v in values if 0 < (v / 10) - 273.15 < 150]
-        if celsius:
-            return round(max(celsius), 1)
-    except Exception:
-        pass
+        import ctypes, struct
 
-    # Method 3: OpenHardwareMonitor WMI (requires OHM running as admin)
-    try:
-        import wmi
-        w = wmi.WMI(namespace="root\\OpenHardwareMonitor")
-        sensors = w.Sensor()
-        cpu_temps = [float(s.Value) for s in sensors
-                     if s.SensorType == 'Temperature' and 'CPU' in s.Name
-                     and 0 < float(s.Value) < 150]
+        # Open shared memory
+        FILE_MAP_READ = 0x0004
+        k32   = ctypes.windll.kernel32
+        h     = k32.OpenFileMappingW(FILE_MAP_READ, False, HWINFO_SM_NAME)
+        if not h:
+            return None
+        ptr   = k32.MapViewOfFile(h, FILE_MAP_READ, 0, 0, HWINFO_SM_SIZE)
+        if not ptr:
+            k32.CloseHandle(h)
+            return None
+        data  = ctypes.string_at(ptr, HWINFO_SM_SIZE)
+        k32.UnmapViewOfFile(ptr)
+        k32.CloseHandle(h)
+
+        # Parse header: sig, ver, rev, poll_time(int64), off_sensor, sz_sensor,
+        #               num_sensor, off_reading, sz_reading, num_reading
+        hdr_fmt  = "<IIIqIIIIII"
+        hdr_size = struct.calcsize(hdr_fmt)
+        sig, _, _, _, _, _, _, off_reading, sz_reading, num_reading = \
+            struct.unpack_from(hdr_fmt, data)
+
+        if sig != HWINFO_SIGNATURE:
+            return None
+
+        # Reading element: tReading, sensorIdx, readingID,
+        #   labelOrig[128], labelUser[128], unit[16],
+        #   value, valueMin, valueMax, valueAvg  (all doubles)
+        rd_fmt = f"<III{SENSOR_STR}s{SENSOR_STR}s{UNIT_STR}sdddd"
+        rd_size = struct.calcsize(rd_fmt)
+
+        cpu_temps = []
+        for i in range(num_reading):
+            off = off_reading + i * sz_reading
+            chunk = data[off: off + rd_size]
+            if len(chunk) < rd_size:
+                break
+            t_reading, _, _, label_orig, _, _, val, *_ = struct.unpack(rd_fmt, chunk)
+            if t_reading == READING_TYPE_TEMP:
+                label = label_orig.rstrip(b"\x00").decode("utf-8", errors="ignore").lower()
+                if "cpu" in label and 0 < val < 150:
+                    cpu_temps.append(val)
+
         if cpu_temps:
             return round(max(cpu_temps), 1)
+
     except Exception:
         pass
 
