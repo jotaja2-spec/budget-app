@@ -1,10 +1,19 @@
+from datetime import datetime
 import requests
 import config
 from logger import bot_logger
 
+QUIET_START = 20  # 8pm
+QUIET_END   = 7   # 7am
+
 
 def _pushover_enabled() -> bool:
     return bool(config.PUSHOVER_API_TOKEN and config.PUSHOVER_USER_KEY)
+
+
+def _in_quiet_hours() -> bool:
+    hour = datetime.now().hour
+    return hour >= QUIET_START or hour < QUIET_END
 
 
 def send_notification(title: str, message: str, priority: int = 0) -> bool:
@@ -13,6 +22,9 @@ def send_notification(title: str, message: str, priority: int = 0) -> bool:
     Returns True on success.
     """
     if not _pushover_enabled():
+        return False
+    if _in_quiet_hours():
+        bot_logger.debug(f"Notification suppressed (quiet hours 8pm–7am): {title}")
         return False
 
     payload = {
