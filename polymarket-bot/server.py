@@ -27,16 +27,55 @@ _cached_cpu_temp   = None        # updated by background thread
 
 
 def _read_cpu_temp() -> float | None:
-    """Read CPU temperature via WMI (Windows). Returns °C or None."""
+    """
+    Read CPU temperature on Windows. Tries three methods in order:
+    1. WMI MSAcpi_ThermalZoneTemperature
+    2. PowerShell subprocess (same data, different path)
+    3. OpenHardwareMonitor WMI (if OHM is running)
+    Returns °C or None if no method works on this hardware.
+    """
+    # Method 1: WMI thermal zone
     try:
         import wmi
         w = wmi.WMI(namespace="root\\wmi")
         zones = w.MSAcpi_ThermalZoneTemperature()
         if zones:
-            celsius = [(z.CurrentTemperature / 10) - 273.15 for z in zones]
+            celsius = [(z.CurrentTemperature / 10) - 273.15 for z in zones
+                       if 0 < (z.CurrentTemperature / 10) - 273.15 < 150]
+            if celsius:
+                return round(max(celsius), 1)
+    except Exception:
+        pass
+
+    # Method 2: PowerShell WMIC fallback
+    try:
+        import subprocess
+        out = subprocess.check_output(
+            ['powershell', '-NoProfile', '-Command',
+             '(Get-WmiObject -Namespace root\\wmi '
+             '-Class MSAcpi_ThermalZoneTemperature).CurrentTemperature'],
+            timeout=5, stderr=subprocess.DEVNULL, text=True
+        ).strip()
+        values = [float(v) for v in out.splitlines() if v.strip().lstrip('-').replace('.','').isdigit()]
+        celsius = [(v / 10) - 273.15 for v in values if 0 < (v / 10) - 273.15 < 150]
+        if celsius:
             return round(max(celsius), 1)
     except Exception:
         pass
+
+    # Method 3: OpenHardwareMonitor WMI (requires OHM running as admin)
+    try:
+        import wmi
+        w = wmi.WMI(namespace="root\\OpenHardwareMonitor")
+        sensors = w.Sensor()
+        cpu_temps = [float(s.Value) for s in sensors
+                     if s.SensorType == 'Temperature' and 'CPU' in s.Name
+                     and 0 < float(s.Value) < 150]
+        if cpu_temps:
+            return round(max(cpu_temps), 1)
+    except Exception:
+        pass
+
     return None
 
 
