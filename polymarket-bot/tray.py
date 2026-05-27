@@ -18,9 +18,21 @@ from PIL import Image, ImageDraw, ImageFont
 
 BASE        = os.path.dirname(os.path.abspath(__file__))
 STATUS_URL  = "http://localhost:5000/api/status"
+TRAY_PID    = os.path.join(BASE, "tray.pid")
 POLL_SECS   = 60
 
 _state = {"status": None, "icon": None}
+
+
+def _write_pid():
+    with open(TRAY_PID, "w") as f:
+        f.write(str(os.getpid()))
+
+def _remove_pid():
+    try:
+        os.remove(TRAY_PID)
+    except FileNotFoundError:
+        pass
 
 
 # ── Icon drawing ──────────────────────────────────────────────────────────────
@@ -97,6 +109,7 @@ def _open_app(_=None):
 
 
 def _quit_tray(icon, _=None):
+    _remove_pid()
     icon.stop()
 
 
@@ -148,9 +161,13 @@ def main():
             pystray.MenuItem("Quit Tray",              _quit_tray),
         ),
     )
+    _write_pid()
     _state["icon"] = icon
     threading.Thread(target=_poll, args=(icon,), daemon=True).start()
-    icon.run()
+    try:
+        icon.run()
+    finally:
+        _remove_pid()
 
 
 if __name__ == "__main__":

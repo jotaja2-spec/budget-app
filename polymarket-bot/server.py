@@ -19,6 +19,7 @@ BASE = os.path.dirname(__file__)
 PAPER_STATE = os.path.join(BASE, "paper_state.json")
 RISK_STATE  = os.path.join(BASE, "risk_state.json")
 PID_FILE    = os.path.join(BASE, "bot.pid")
+TRAY_PID    = os.path.join(BASE, "tray.pid")
 BOT_LOG     = os.path.join(BASE, "logs", "bot.log")
 TRADE_LOG   = os.path.join(BASE, "logs", "trades.log")
 
@@ -129,27 +130,42 @@ def api_status():
     })
 
 
+def _kill_pid_file(path: str) -> bool:
+    """Kill the process whose PID is stored in path. Returns True if killed."""
+    if not os.path.exists(path):
+        return False
+    try:
+        with open(path) as f:
+            pid = int(f.read().strip())
+        proc = psutil.Process(pid)
+        proc.terminate()
+        proc.wait(timeout=5)
+        os.remove(path)
+        return True
+    except psutil.NoSuchProcess:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        return True
+    except Exception:
+        return False
+
+
 @app.route("/api/shutdown", methods=["POST"])
 def api_shutdown():
-    """Kill the bot process, then shut down the server."""
-    bot_killed = False
-    if os.path.exists(PID_FILE):
-        try:
-            with open(PID_FILE) as f:
-                pid = int(f.read().strip())
-            proc = psutil.Process(pid)
-            proc.terminate()
-            proc.wait(timeout=5)
-            os.remove(PID_FILE)
-            bot_killed = True
-        except psutil.NoSuchProcess:
-            bot_killed = True
-            try:
-                os.remove(PID_FILE)
-            except FileNotFoundError:
-                pass
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
+    """Kill bot, tray, and any app window, then shut down the server."""
+    _kill_pid_file(PID_FILE)   # trading bot
+    _kill_pid_file(TRAY_PID)   # system tray
+
+    # Also kill any app.py (pywebview) process by name
+    try:
+        for proc in psutil.process_iter(["pid", "cmdline"]):
+            cmdline = " ".join(proc.info.get("cmdline") or [])
+            if "app.py" in cmdline and proc.pid != os.getpid():
+                proc.terminate()
+    except Exception:
+        pass
 
     def _stop_server():
         import time as _time
@@ -157,7 +173,7 @@ def api_shutdown():
         os.kill(os.getpid(), signal.SIGTERM)
 
     threading.Thread(target=_stop_server, daemon=True).start()
-    return jsonify({"status": "shutting_down", "bot_killed": bot_killed})
+    return jsonify({"status": "shutting_down"})
 
 
 @app.route("/api/positions")
