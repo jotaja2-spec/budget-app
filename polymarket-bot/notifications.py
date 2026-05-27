@@ -16,15 +16,17 @@ def _in_quiet_hours() -> bool:
     return hour >= QUIET_START or hour < QUIET_END
 
 
-def send_notification(title: str, message: str, priority: int = 0) -> bool:
+def send_notification(title: str, message: str, priority: int = 0,
+                      force: bool = False) -> bool:
     """
-    priority: -1=low, 0=normal, 1=high, 2=emergency (emergency requires retry/expire params)
+    priority: -1=low, 0=normal, 1=high, 2=emergency
+    force: if True, bypasses quiet hours (use for safety alerts only)
     Returns True on success.
     """
     if not _pushover_enabled():
         return False
-    if _in_quiet_hours():
-        bot_logger.debug(f"Notification suppressed (quiet hours 8pm–7am): {title}")
+    if _in_quiet_hours() and not force:
+        bot_logger.debug(f"Notification suppressed (quiet hours 8pm-7am): {title}")
         return False
 
     payload = {
@@ -60,7 +62,7 @@ def notify_trade(city: str, direction: str, price: float, size_usd: float, edge:
 
 
 def notify_daily_loss_limit(bankroll: float, loss: float, limit: float):
-    title = "Bot Halted — Daily Loss Limit Hit"
+    title = "Bot Halted - Daily Loss Limit Hit"
     msg = (
         f"Loss today: ${loss:.2f}\n"
         f"Limit: ${limit:.2f}\n"
@@ -72,6 +74,6 @@ def notify_daily_loss_limit(bankroll: float, loss: float, limit: float):
 
 def notify_startup(paper: bool, bankroll: float):
     mode = "PAPER TRADING" if paper else "LIVE TRADING"
-    title = f"Bot Started — {mode}"
+    title = f"Bot Started - {mode}"
     msg = f"Bankroll: ${bankroll:.2f}\nScanning every 5 minutes."
     send_notification(title, msg)

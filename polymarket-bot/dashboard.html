@@ -66,6 +66,17 @@
 
     #last-update { color: var(--muted); font-size: 11px; }
 
+    #cpu-temp-badge {
+      font-size: 11px; font-weight: 700;
+      padding: 3px 10px; border-radius: 9999px;
+      display: none;
+    }
+    .temp-ok     { background: #1c2e1c; color: var(--green); }
+    .temp-warm   { background: #2e2a10; color: var(--yellow); }
+    .temp-hot    { background: #3b1515; color: var(--red); }
+    .temp-danger { background: #7f1d1d; color: #fca5a5;
+                   animation: pulse 1s infinite; }
+
     #btn-shutdown {
       padding: 6px 14px; border-radius: 6px;
       background: #2a1515; border: 1px solid #7f1d1d;
@@ -237,6 +248,7 @@
       <span id="bot-status-label">Bot stopped</span>
     </span>
     <span id="last-update">—</span>
+    <span id="cpu-temp-badge">🌡 —</span>
     <span id="mode-badge" class="badge-paper">PAPER</span>
     <button id="btn-shutdown" onclick="openModal()">■ Shutdown</button>
   </div>
@@ -449,6 +461,20 @@
       memEl.textContent = `${mem.toFixed(0)}%`;
 
       $('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+      // CPU temperature badge
+      const tempBadge = $('cpu-temp-badge');
+      if (d.cpu_temp != null) {
+        const t = d.cpu_temp;
+        tempBadge.textContent = `🌡 ${t.toFixed(0)}°C`;
+        tempBadge.style.display = 'inline';
+        tempBadge.className =
+          t >= 90 ? 'temp-danger' :
+          t >= 80 ? 'temp-hot' :
+          t >= 70 ? 'temp-warm' : 'temp-ok';
+      } else {
+        tempBadge.style.display = 'none';
+      }
     } catch(e) {
       if (!_shutdownInProgress) {
         $('last-update').textContent = 'Server offline';

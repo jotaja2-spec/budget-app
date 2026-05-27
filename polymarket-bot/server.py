@@ -10,12 +10,58 @@ import re
 import signal
 import socket
 import threading
+import time
 import psutil
 from flask import Flask, jsonify, send_from_directory, request
 
 app = Flask(__name__, static_folder=".")
 
 BASE = os.path.dirname(__file__)
+
+# ── CPU temperature ───────────────────────────────────────────────────────────
+CPU_TEMP_ALERT_C   = 90          # degrees Celsius
+TEMP_CHECK_SECS    = 120         # check every 2 minutes
+TEMP_ALERT_COOLDOWN = 900        # only re-alert every 15 minutes
+_last_temp_alert   = 0.0
+_cached_cpu_temp   = None        # updated by background thread
+
+
+def _read_cpu_temp() -> float | None:
+    """Read CPU temperature via WMI (Windows). Returns °C or None."""
+    try:
+        import wmi
+        w = wmi.WMI(namespace="root\\wmi")
+        zones = w.MSAcpi_ThermalZoneTemperature()
+        if zones:
+            celsius = [(z.CurrentTemperature / 10) - 273.15 for z in zones]
+            return round(max(celsius), 1)
+    except Exception:
+        pass
+    return None
+
+
+def _temp_monitor():
+    """Background thread: checks CPU temp every 2 min, alerts if >90°C."""
+    global _last_temp_alert, _cached_cpu_temp
+    while True:
+        time.sleep(TEMP_CHECK_SECS)
+        temp = _read_cpu_temp()
+        _cached_cpu_temp = temp
+        if temp is not None and temp >= CPU_TEMP_ALERT_C:
+            now = time.time()
+            if now - _last_temp_alert > TEMP_ALERT_COOLDOWN:
+                _last_temp_alert = now
+                try:
+                    from notifications import send_notification
+                    send_notification(
+                        "🔥 CPU Temperature Warning",
+                        f"CPU is at {temp:.0f}°C — above {CPU_TEMP_ALERT_C}°C!\n"
+                        f"Consider checking your cooling.",
+                        priority=1,
+                        force=True,   # bypass quiet hours for safety alerts
+                    )
+                except Exception:
+                    pass
 PAPER_STATE = os.path.join(BASE, "paper_state.json")
 RISK_STATE  = os.path.join(BASE, "risk_state.json")
 PID_FILE    = os.path.join(BASE, "bot.pid")
@@ -125,8 +171,9 @@ def api_status():
         "date": risk.get("date", "—"),
         "has_data": bool(paper),
         "bot_running": _bot_running(),
-        "cpu_pct": round(cpu, 1),
-        "mem_pct": round(mem.percent, 1),
+        "cpu_pct":  round(cpu, 1),
+        "mem_pct":  round(mem.percent, 1),
+        "cpu_temp": _cached_cpu_temp,
     })
 
 
@@ -196,6 +243,11 @@ def api_info():
 
 
 if __name__ == "__main__":
+    # Start CPU temperature monitor in background
+    threading.Thread(target=_temp_monitor, daemon=True).start()
+    # Grab initial reading immediately
+    _cached_cpu_temp = _read_cpu_temp()
+
     ip = _local_ip()
     print(f"Dashboard running at http://localhost:5000")
     print(f"Phone access (same WiFi): http://{ip}:5000")
