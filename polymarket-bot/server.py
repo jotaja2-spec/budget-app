@@ -10,111 +10,12 @@ import re
 import signal
 import socket
 import threading
-import time
 import psutil
 from flask import Flask, jsonify, send_from_directory, request
 
 app = Flask(__name__, static_folder=".")
 
 BASE = os.path.dirname(__file__)
-
-# ── CPU temperature ───────────────────────────────────────────────────────────
-CPU_TEMP_ALERT_C   = 95          # degrees Celsius
-TEMP_CHECK_SECS    = 120         # check every 2 minutes
-TEMP_ALERT_COOLDOWN = 900        # only re-alert every 15 minutes
-_last_temp_alert   = 0.0
-_cached_cpu_temp   = None        # updated by background thread
-
-
-def _read_cpu_temp() -> float | None:
-    """
-    Read CPU temperature via HWiNFO64 shared memory.
-    Requires HWiNFO64 running with Shared Memory Support enabled
-    (Settings -> Sensors -> Shared Memory Support).
-    """
-    HWINFO_SM_NAME    = "Global\\HWiNFO_SENS_SM2"
-    HWINFO_SM_SIZE    = 1 * 1024 * 1024   # 1 MB buffer
-    HWINFO_SIGNATURE  = 0x53697748        # 'HWiS'
-    READING_TYPE_TEMP = 1
-    SENSOR_STR        = 128
-    UNIT_STR          = 16
-
-    try:
-        import ctypes, struct
-
-        # Open shared memory
-        FILE_MAP_READ = 0x0004
-        k32   = ctypes.windll.kernel32
-        h     = k32.OpenFileMappingW(FILE_MAP_READ, False, HWINFO_SM_NAME)
-        if not h:
-            return None
-        ptr   = k32.MapViewOfFile(h, FILE_MAP_READ, 0, 0, HWINFO_SM_SIZE)
-        if not ptr:
-            k32.CloseHandle(h)
-            return None
-        data  = ctypes.string_at(ptr, HWINFO_SM_SIZE)
-        k32.UnmapViewOfFile(ptr)
-        k32.CloseHandle(h)
-
-        # Parse header: sig, ver, rev, poll_time(int64), off_sensor, sz_sensor,
-        #               num_sensor, off_reading, sz_reading, num_reading
-        hdr_fmt  = "<IIIqIIIIII"
-        hdr_size = struct.calcsize(hdr_fmt)
-        sig, _, _, _, _, _, _, off_reading, sz_reading, num_reading = \
-            struct.unpack_from(hdr_fmt, data)
-
-        if sig != HWINFO_SIGNATURE:
-            return None
-
-        # Reading element: tReading, sensorIdx, readingID,
-        #   labelOrig[128], labelUser[128], unit[16],
-        #   value, valueMin, valueMax, valueAvg  (all doubles)
-        rd_fmt = f"<III{SENSOR_STR}s{SENSOR_STR}s{UNIT_STR}sdddd"
-        rd_size = struct.calcsize(rd_fmt)
-
-        cpu_temps = []
-        for i in range(num_reading):
-            off = off_reading + i * sz_reading
-            chunk = data[off: off + rd_size]
-            if len(chunk) < rd_size:
-                break
-            t_reading, _, _, label_orig, _, _, val, *_ = struct.unpack(rd_fmt, chunk)
-            if t_reading == READING_TYPE_TEMP:
-                label = label_orig.rstrip(b"\x00").decode("utf-8", errors="ignore").lower()
-                if "cpu" in label and 0 < val < 150:
-                    cpu_temps.append(val)
-
-        if cpu_temps:
-            return round(max(cpu_temps), 1)
-
-    except Exception:
-        pass
-
-    return None
-
-
-def _temp_monitor():
-    """Background thread: checks CPU temp every 2 min, alerts if >90°C."""
-    global _last_temp_alert, _cached_cpu_temp
-    while True:
-        time.sleep(TEMP_CHECK_SECS)
-        temp = _read_cpu_temp()
-        _cached_cpu_temp = temp
-        if temp is not None and temp >= CPU_TEMP_ALERT_C:
-            now = time.time()
-            if now - _last_temp_alert > TEMP_ALERT_COOLDOWN:
-                _last_temp_alert = now
-                try:
-                    from notifications import send_notification
-                    send_notification(
-                        "🔥 CPU Temperature Warning",
-                        f"CPU is at {temp:.0f}°C — above {CPU_TEMP_ALERT_C}°C!\n"
-                        f"Check your cooling immediately.",
-                        priority=1,
-                        force=True,   # bypass quiet hours for safety alerts
-                    )
-                except Exception:
-                    pass
 PAPER_STATE = os.path.join(BASE, "paper_state.json")
 RISK_STATE  = os.path.join(BASE, "risk_state.json")
 PID_FILE    = os.path.join(BASE, "bot.pid")
@@ -157,7 +58,6 @@ def _tail(path: str, n: int = 100) -> list[str]:
 
 def _parse_trade_lines(lines: list[str]) -> list[dict]:
     trades = []
-    # Format: 2025-07-04 10:00:00 | INFO     | TRADE | mode=PAPER city=... market=... direction=... price=... size=$... edge=... | reason
     pattern = re.compile(
         r"(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
         r".*?TRADE \| mode=(?P<mode>\S+) city=(?P<city>[^m]+?) market=(?P<market>\S+)"
@@ -224,9 +124,8 @@ def api_status():
         "date": risk.get("date", "—"),
         "has_data": bool(paper),
         "bot_running": _bot_running(),
-        "cpu_pct":  round(cpu, 1),
-        "mem_pct":  round(mem.percent, 1),
-        "cpu_temp": _cached_cpu_temp,
+        "cpu_pct": round(cpu, 1),
+        "mem_pct": round(mem.percent, 1),
     })
 
 
@@ -244,7 +143,7 @@ def api_shutdown():
             os.remove(PID_FILE)
             bot_killed = True
         except psutil.NoSuchProcess:
-            bot_killed = True  # already gone
+            bot_killed = True
             try:
                 os.remove(PID_FILE)
             except FileNotFoundError:
@@ -296,11 +195,6 @@ def api_info():
 
 
 if __name__ == "__main__":
-    # Start CPU temperature monitor in background
-    threading.Thread(target=_temp_monitor, daemon=True).start()
-    # Grab initial reading immediately
-    _cached_cpu_temp = _read_cpu_temp()
-
     ip = _local_ip()
     print(f"Dashboard running at http://localhost:5000")
     print(f"Phone access (same WiFi): http://{ip}:5000")

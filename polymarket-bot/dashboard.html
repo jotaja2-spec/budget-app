@@ -66,16 +66,6 @@
 
     #last-update { color: var(--muted); font-size: 11px; }
 
-    #cpu-temp-badge {
-      font-size: 11px; font-weight: 700;
-      padding: 3px 10px; border-radius: 9999px;
-      display: none;
-    }
-    .temp-ok     { background: #1c2e1c; color: var(--green); }
-    .temp-warm   { background: #2e2a10; color: var(--yellow); }
-    .temp-hot    { background: #3b1515; color: var(--red); }
-    .temp-danger { background: #7f1d1d; color: #fca5a5;
-                   animation: pulse 1s infinite; }
 
     #btn-shutdown {
       padding: 6px 14px; border-radius: 6px;
@@ -241,7 +231,6 @@
       <span id="bot-status-label">Bot stopped</span>
     </span>
     <span id="last-update">—</span>
-    <span id="cpu-temp-badge">🌡 —</span>
     <span id="mode-badge" class="badge-paper">PAPER</span>
     <button id="btn-shutdown" onclick="openModal()">■ Shutdown</button>
   </div>
@@ -286,9 +275,9 @@
     <div class="label">Daily Limit</div>
     <div class="value" id="stat-limit">—</div>
   </div>
-  <div class="stat-card" id="temp-card" style="display:none">
-    <div class="label">CPU Temp</div>
-    <div class="value neu" id="stat-temp">—</div>
+  <div class="stat-card">
+    <div class="label">RAM Usage</div>
+    <div class="value neu" id="stat-mem">—</div>
   </div>
 </div>
 
@@ -430,23 +419,11 @@
 
 $('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
 
-      // CPU temperature — stat card + header badge
-      const tempBadge = $('cpu-temp-badge');
-      const tempCard  = $('stat-temp');
-      if (d.cpu_temp != null) {
-        const t = d.cpu_temp;
-        const tempClass  = t >= 80 ? 'neg' : t >= 70 ? 'warn' : 'pos';
-        const badgeClass = t >= 95 ? 'temp-danger' : t >= 80 ? 'temp-hot' : t >= 70 ? 'temp-warm' : 'temp-ok';
-        tempCard.className = `value ${tempClass}`;
-        tempCard.textContent = `${t.toFixed(0)}°C`;
-        tempBadge.textContent = `🌡 ${t.toFixed(0)}°C`;
-        $('temp-card').style.display = 'block';
-        tempBadge.style.display = 'inline';
-        tempBadge.className = badgeClass;
-      } else {
-        $('temp-card').style.display = 'none';
-        tempBadge.style.display = 'none';
-      }
+      // RAM
+      const mem = d.mem_pct ?? 0;
+      const memEl = $('stat-mem');
+      memEl.className = 'value ' + (mem >= 85 ? 'neg' : mem >= 70 ? 'warn' : 'neu');
+      memEl.textContent = `${mem.toFixed(0)}%`;
     } catch(e) {
       if (!_shutdownInProgress) {
         $('last-update').textContent = 'Server offline';
