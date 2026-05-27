@@ -35,6 +35,48 @@ CITIES = {
         "timezone": "Europe/London",
         "aliases": ["london"],
     },
+    "San Francisco": {
+        "lat": 37.7749,
+        "lon": -122.4194,
+        "timezone": "America/Los_Angeles",
+        "aliases": ["san francisco", "sf", "s.f.", "san francisco, ca"],
+    },
+    "Phoenix": {
+        "lat": 33.4484,
+        "lon": -112.0740,
+        "timezone": "America/Phoenix",
+        "aliases": ["phoenix"],
+    },
+    "Houston": {
+        "lat": 29.7604,
+        "lon": -95.3698,
+        "timezone": "America/Chicago",
+        "aliases": ["houston"],
+    },
+    "Dallas": {
+        "lat": 32.7767,
+        "lon": -96.7970,
+        "timezone": "America/Chicago",
+        "aliases": ["dallas"],
+    },
+    "Seattle": {
+        "lat": 47.6062,
+        "lon": -122.3321,
+        "timezone": "America/Los_Angeles",
+        "aliases": ["seattle"],
+    },
+    "Denver": {
+        "lat": 39.7392,
+        "lon": -104.9903,
+        "timezone": "America/Denver",
+        "aliases": ["denver"],
+    },
+    "Atlanta": {
+        "lat": 33.7490,
+        "lon": -84.3880,
+        "timezone": "America/New_York",
+        "aliases": ["atlanta"],
+    },
 }
 
 # Trading
