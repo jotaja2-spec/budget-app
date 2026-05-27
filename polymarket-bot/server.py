@@ -19,7 +19,7 @@ app = Flask(__name__, static_folder=".")
 BASE = os.path.dirname(__file__)
 
 # ── CPU temperature ───────────────────────────────────────────────────────────
-CPU_TEMP_ALERT_C   = 90          # degrees Celsius
+CPU_TEMP_ALERT_C   = 95          # degrees Celsius
 TEMP_CHECK_SECS    = 120         # check every 2 minutes
 TEMP_ALERT_COOLDOWN = 900        # only re-alert every 15 minutes
 _last_temp_alert   = 0.0
@@ -56,7 +56,7 @@ def _temp_monitor():
                     send_notification(
                         "🔥 CPU Temperature Warning",
                         f"CPU is at {temp:.0f}°C — above {CPU_TEMP_ALERT_C}°C!\n"
-                        f"Consider checking your cooling.",
+                        f"Check your cooling immediately.",
                         priority=1,
                         force=True,   # bypass quiet hours for safety alerts
                     )
