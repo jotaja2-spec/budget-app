@@ -286,7 +286,7 @@
     <div class="label">Daily Limit</div>
     <div class="value" id="stat-limit">—</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-card" id="temp-card" style="display:none">
     <div class="label">CPU Temp</div>
     <div class="value neu" id="stat-temp">—</div>
   </div>
@@ -435,21 +435,16 @@ $('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
       const tempCard  = $('stat-temp');
       if (d.cpu_temp != null) {
         const t = d.cpu_temp;
-        const tempClass =
-          t >= 95 ? 'neg' :
-          t >= 80 ? 'neg' :
-          t >= 70 ? 'warn' : 'pos';
-        const badgeClass =
-          t >= 95 ? 'temp-danger' :
-          t >= 80 ? 'temp-hot' :
-          t >= 70 ? 'temp-warm' : 'temp-ok';
+        const tempClass  = t >= 80 ? 'neg' : t >= 70 ? 'warn' : 'pos';
+        const badgeClass = t >= 95 ? 'temp-danger' : t >= 80 ? 'temp-hot' : t >= 70 ? 'temp-warm' : 'temp-ok';
         tempCard.className = `value ${tempClass}`;
         tempCard.textContent = `${t.toFixed(0)}°C`;
         tempBadge.textContent = `🌡 ${t.toFixed(0)}°C`;
+        $('temp-card').style.display = 'block';
         tempBadge.style.display = 'inline';
         tempBadge.className = badgeClass;
       } else {
-        tempCard.textContent = 'N/A';
+        $('temp-card').style.display = 'none';
         tempBadge.style.display = 'none';
       }
     } catch(e) {
