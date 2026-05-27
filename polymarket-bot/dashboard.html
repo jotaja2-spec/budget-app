@@ -113,13 +113,6 @@
     }
     .stat-card .value { font-size: 22px; font-weight: 700; }
 
-    /* CPU gauge card */
-    .cpu-card { position: relative; overflow: hidden; }
-    .cpu-bar {
-      position: absolute; bottom: 0; left: 0; height: 3px;
-      transition: width 0.5s ease, background 0.5s ease;
-      border-radius: 0 0 8px 8px;
-    }
 
     .pos { color: var(--green); }
     .neg { color: var(--red); }
@@ -293,11 +286,6 @@
     <div class="label">Daily Limit</div>
     <div class="value" id="stat-limit">—</div>
   </div>
-  <div class="stat-card cpu-card">
-    <div class="label">CPU Usage</div>
-    <div class="value neu" id="stat-cpu">—</div>
-    <div id="cpu-bar" class="cpu-bar" style="width:0%;background:var(--green)"></div>
-  </div>
   <div class="stat-card">
     <div class="label">CPU Temp</div>
     <div class="value neu" id="stat-temp">—</div>
@@ -380,11 +368,6 @@
   function dirBadge(d) {
     return d === 'YES' ? `<span class="dir-yes">YES</span>` : `<span class="dir-no">NO</span>`;
   }
-  function cpuColor(pct) {
-    if (pct >= 80) return 'var(--red)';
-    if (pct >= 60) return 'var(--yellow)';
-    return 'var(--green)';
-  }
   function escHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
@@ -445,16 +428,7 @@
       const limitUsd = d.starting_bankroll * 0.20;
       $('stat-limit').innerHTML = `<span class="${-d.daily_pnl >= limitUsd * 0.8 ? 'neg' : 'neu'}">$${limitUsd.toFixed(2)}</span>`;
 
-      // CPU gauge
-      const cpu = d.cpu_pct ?? 0;
-      const cpuEl = $('stat-cpu');
-      const cpuBar = $('cpu-bar');
-      cpuEl.className = 'value ' + (cpu >= 80 ? 'neg' : cpu >= 60 ? 'warn' : 'pos');
-      cpuEl.textContent = `${cpu.toFixed(0)}%`;
-      cpuBar.style.width = `${cpu}%`;
-      cpuBar.style.background = cpuColor(cpu);
-
-      $('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
+$('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
 
       // CPU temperature — stat card + header badge
       const tempBadge = $('cpu-temp-badge');
