@@ -1,195 +1,217 @@
 """
-Polls the Polymarket Gamma API for open temperature/weather markets
-matching the configured target cities.
+Fetches weather markets from Polymarket via the Events API.
 
-Each returned market dict contains:
-  id, question, city, threshold_f, direction, yes_price, no_price,
-  liquidity, end_date, condition_id, token_id_yes, token_id_no
+Polymarket organises temperature markets as events titled:
+  "Highest temperature in [City] on [Date]?"
+Each event contains nested markets like:
+  "Will the highest temperature in NYC be 22°C on May 28?"
+  "Will the highest temperature in NYC be 24°C or above on May 28?"
+
+This scanner fetches those events, extracts the nested markets,
+and returns parsed dicts ready for signal evaluation.
 """
 
+import json
 import re
 import requests
-from datetime import datetime, date
+from datetime import date, datetime
 from typing import Optional
 
 import config
 from logger import bot_logger
 
-# Keywords that flag a market as weather-related
-WEATHER_KEYWORDS = re.compile(
-    r"\b(temperature|temp|high|low|degrees|fahrenheit|celsius|°f|°c|weather)\b",
-    re.IGNORECASE,
-)
+EVENTS_URL = "https://gamma-api.polymarket.com/events"
 
-# Parses questions like:
-#   "Will the high temperature in New York exceed 85°F on July 4?"
-#   "Will Chicago temperature be above 90°F on 2025-07-04?"
-#   "Will the low temperature in Miami be below 60°F?"
-_QUESTION_RE = re.compile(
-    r"(?P<direction>above|below|exceed|over|under|at least|at most)"
-    r"\s+(?P<threshold>[\d.]+)\s*°?\s*(?P<unit>[FC])",
+# Matches event titles: "Highest temperature in NYC on May 28?"
+_EVENT_TITLE_RE = re.compile(r"highest temperature in (.+?) on", re.IGNORECASE)
+
+# Matches market questions — three formats:
+#   "...be 22°C on..."           → exact bucket
+#   "...be 22°C or below on..."  → lower bracket
+#   "...be 22°C or above on..."  → upper bracket
+_MARKET_Q_RE = re.compile(
+    r"be\s+(\d+(?:\.\d+)?)\s*°?C\s*(or below|or above)?",
     re.IGNORECASE,
 )
 
 _DATE_RE = re.compile(
-    r"\b(\d{4}-\d{2}-\d{2}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*"
-    r"\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{4})?)\b",
+    r"on\s+((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(?:,?\s*\d{4})?)",
     re.IGNORECASE,
 )
 
 
 def _celsius_to_f(c: float) -> float:
-    return c * 9 / 5 + 32
+    return c * 9.0 / 5.0 + 32.0
 
 
-def _parse_question(question: str) -> Optional[dict]:
-    """Extract threshold_f, direction ('YES_above'/'YES_below') from question text."""
-    m = _QUESTION_RE.search(question)
-    if not m:
-        return None
-
-    threshold = float(m.group("threshold"))
-    unit = m.group("unit").upper()
-    direction_word = m.group("direction").lower()
-
-    if unit == "C":
-        threshold = _celsius_to_f(threshold)
-
-    # Normalize direction: does "YES" resolve if temp is ABOVE or BELOW threshold?
-    above_words = {"above", "exceed", "over", "at least"}
-    direction = "above" if direction_word in above_words else "below"
-
-    return {"threshold_f": threshold, "yes_if": direction}
-
-
-def _match_city(question: str) -> Optional[str]:
-    q = question.lower()
+def _match_city(text: str) -> Optional[str]:
+    t = text.lower().strip()
     for city_name, city_data in config.CITIES.items():
         for alias in city_data["aliases"]:
-            if alias in q:
+            if alias == t or alias in t:
                 return city_name
     return None
 
 
-def _fetch_markets(offset: int = 0, limit: int = 500) -> list:
-    url = f"{config.GAMMA_API_URL}/markets"
-    params = {
-        "active": "true",
-        "closed": "false",
-        "limit": limit,
-        "offset": offset,
-        "order": "volume24hr",
-        "ascending": "false",
-    }
+def _parse_end_date(question: str) -> str:
+    m = _DATE_RE.search(question)
+    if not m:
+        return ""
+    raw = m.group(1).strip()
+    for fmt in ("%B %d, %Y", "%B %d %Y", "%b %d, %Y", "%b %d %Y", "%B %d", "%b %d"):
+        try:
+            d = datetime.strptime(raw, fmt)
+            year = d.year if d.year > 2000 else date.today().year
+            return date(year, d.month, d.day).isoformat() + "T00:00:00Z"
+        except ValueError:
+            continue
+    return ""
+
+
+def _parse_prices(market: dict) -> tuple[Optional[float], Optional[float]]:
+    outcomes = market.get("outcomes", "[]")
+    if isinstance(outcomes, str):
+        try:
+            outcomes = json.loads(outcomes)
+        except Exception:
+            outcomes = []
+    prices = market.get("outcomePrices", "[]")
+    if isinstance(prices, str):
+        try:
+            prices = json.loads(prices)
+        except Exception:
+            prices = []
+
+    yes_price = no_price = None
+    if isinstance(outcomes, list) and isinstance(prices, list):
+        for i, o in enumerate(outcomes):
+            s = str(o).upper()
+            if s == "YES" and i < len(prices):
+                try:
+                    yes_price = float(prices[i])
+                except Exception:
+                    pass
+            elif s == "NO" and i < len(prices):
+                try:
+                    no_price = float(prices[i])
+                except Exception:
+                    pass
+    return yes_price, no_price
+
+
+def _parse_token_ids(market: dict) -> tuple:
+    clob = market.get("clobTokenIds", [])
+    if isinstance(clob, str):
+        try:
+            clob = json.loads(clob)
+        except Exception:
+            clob = []
+    return (clob[0] if len(clob) > 0 else None,
+            clob[1] if len(clob) > 1 else None)
+
+
+def _fetch_events(offset: int = 0) -> list:
     try:
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-        # Gamma API returns list or {"data": [...], "count": N}
-        if isinstance(data, list):
-            return data
-        return data.get("data", [])
+        r = requests.get(EVENTS_URL, params={
+            "active": "true", "closed": "false",
+            "limit": 100, "offset": offset,
+            "order": "startDate", "ascending": "false",
+        }, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+        return data if isinstance(data, list) else data.get("data", [])
     except Exception as e:
-        bot_logger.error(f"Gamma API fetch failed (offset={offset}): {e}")
+        bot_logger.error(f"Events API fetch failed (offset={offset}): {e}")
         return []
 
 
 def get_weather_markets() -> list[dict]:
-    """Return parsed weather markets for configured cities."""
-    raw_markets = []
+    """Fetch and parse all active temperature markets from Polymarket events."""
+    results = []
     offset = 0
 
-    # Fetch up to 2000 markets to find weather ones (they're a small subset)
-    while offset < 2000:
-        batch = _fetch_markets(offset=offset)
+    while offset < 3000:
+        batch = _fetch_events(offset=offset)
         if not batch:
             break
-        raw_markets.extend(batch)
-        if len(batch) < 500:
+
+        for event in batch:
+            title = event.get("title", "") or ""
+            m = _EVENT_TITLE_RE.search(title)
+            if not m:
+                continue
+
+            city_raw = m.group(1).strip()
+            city = _match_city(city_raw)
+            if city is None:
+                bot_logger.debug(f"scanner: no config match for city '{city_raw}'")
+                continue
+
+            nested_markets = event.get("markets", [])
+            if not nested_markets:
+                continue
+
+            for mkt in nested_markets:
+                question = mkt.get("question", "")
+                qm = _MARKET_Q_RE.search(question)
+                if not qm:
+                    continue
+
+                threshold_c = float(qm.group(1))
+                bracket     = (qm.group(2) or "").lower().strip()
+                threshold_f = _celsius_to_f(threshold_c)
+
+                if bracket == "or above":
+                    yes_if = "above"
+                elif bracket == "or below":
+                    yes_if = "below"
+                else:
+                    # Exact bucket — only trade if price is not at an extreme
+                    yes_price_raw, _ = _parse_prices(mkt)
+                    if yes_price_raw is None or yes_price_raw < 0.02 or yes_price_raw > 0.98:
+                        continue
+                    yes_if = "above"  # treat as above lower bound (threshold - 0.5°C)
+                    threshold_f = _celsius_to_f(threshold_c - 0.5)
+
+                yes_price, no_price = _parse_prices(mkt)
+                if yes_price is None:
+                    continue
+
+                liquidity = float(mkt.get("liquidity", 0) or 0)
+                if liquidity < config.MIN_MARKET_LIQUIDITY:
+                    continue
+
+                end_date = mkt.get("endDate", "") or _parse_end_date(question)
+                token_yes, token_no = _parse_token_ids(mkt)
+
+                results.append({
+                    "id":           mkt.get("id", ""),
+                    "condition_id": mkt.get("conditionId", ""),
+                    "question":     question,
+                    "city":         city,
+                    "threshold_f":  round(threshold_f, 2),
+                    "threshold_c":  threshold_c,
+                    "yes_if":       yes_if,
+                    "yes_price":    yes_price,
+                    "no_price":     no_price if no_price is not None else round(1 - yes_price, 4),
+                    "liquidity":    liquidity,
+                    "volume_24h":   float(mkt.get("volume24hr", 0) or 0),
+                    "end_date":     end_date,
+                    "token_id_yes": token_yes,
+                    "token_id_no":  token_no,
+                })
+
+        if len(batch) < 100:
             break
-        offset += 500
+        offset += 100
 
-    results = []
-    for m in raw_markets:
-        question = m.get("question", "")
-        if not question:
-            continue
-        if not WEATHER_KEYWORDS.search(question):
-            continue
+    city_counts = {}
+    for r in results:
+        city_counts[r["city"]] = city_counts.get(r["city"], 0) + 1
 
-        city = _match_city(question)
-        if city is None:
-            continue
-
-        parsed = _parse_question(question)
-        if parsed is None:
-            continue
-
-        # Price for YES outcome (Polymarket prices are 0–1 representing probability)
-        outcomes = m.get("outcomes", "[]")
-        if isinstance(outcomes, str):
-            import json
-            try:
-                outcomes = json.loads(outcomes)
-            except Exception:
-                outcomes = []
-
-        outcome_prices = m.get("outcomePrices", "[]")
-        if isinstance(outcome_prices, str):
-            import json
-            try:
-                outcome_prices = json.loads(outcome_prices)
-            except Exception:
-                outcome_prices = []
-
-        yes_price = no_price = None
-        if isinstance(outcomes, list) and isinstance(outcome_prices, list):
-            for i, o in enumerate(outcomes):
-                if str(o).upper() == "YES" and i < len(outcome_prices):
-                    try:
-                        yes_price = float(outcome_prices[i])
-                    except (ValueError, TypeError):
-                        pass
-                elif str(o).upper() == "NO" and i < len(outcome_prices):
-                    try:
-                        no_price = float(outcome_prices[i])
-                    except (ValueError, TypeError):
-                        pass
-
-        if yes_price is None:
-            continue
-
-        liquidity = float(m.get("liquidity", 0) or 0)
-
-        # Token IDs for CLOB orders (clobTokenIds field)
-        clob_token_ids = m.get("clobTokenIds", [])
-        if isinstance(clob_token_ids, str):
-            import json
-            try:
-                clob_token_ids = json.loads(clob_token_ids)
-            except Exception:
-                clob_token_ids = []
-
-        token_id_yes = clob_token_ids[0] if len(clob_token_ids) > 0 else None
-        token_id_no = clob_token_ids[1] if len(clob_token_ids) > 1 else None
-
-        results.append(
-            {
-                "id": m.get("id", ""),
-                "condition_id": m.get("conditionId", ""),
-                "question": question,
-                "city": city,
-                "threshold_f": parsed["threshold_f"],
-                "yes_if": parsed["yes_if"],  # "above" or "below"
-                "yes_price": yes_price,
-                "no_price": no_price if no_price is not None else round(1 - yes_price, 4),
-                "liquidity": liquidity,
-                "volume_24h": float(m.get("volume24hr", 0) or 0),
-                "end_date": m.get("endDate", ""),
-                "token_id_yes": token_id_yes,
-                "token_id_no": token_id_no,
-            }
-        )
-
-    bot_logger.info(f"Scanner found {len(results)} weather markets across target cities")
+    bot_logger.info(
+        f"Scanner found {len(results)} weather markets across "
+        f"{len(city_counts)} cities: "
+        + ", ".join(f"{c}({n})" for c, n in sorted(city_counts.items()))
+    )
     return results
