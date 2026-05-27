@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 BASE        = os.path.dirname(os.path.abspath(__file__))
 STATUS_URL  = "http://localhost:5000/api/status"
-POLL_SECS   = 30
+POLL_SECS   = 60
 
 _state = {"status": None, "icon": None}
 

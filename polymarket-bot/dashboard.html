@@ -50,9 +50,9 @@
       display: inline-block;
       margin-right: 4px;
     }
-    #bot-status-dot.running { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+    #bot-status-dot.running { background: var(--green); box-shadow: 0 0 6px var(--green); }
     #bot-status-dot.stopped { background: var(--muted); }
-    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
 
     #bot-status-label { font-size: 11px; color: var(--muted); }
 
@@ -544,7 +544,7 @@ $('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
   })();
 
   refresh();
-  setInterval(refresh, 20000);
+  setInterval(refresh, 60000);
 </script>
 </body>
 </html>
