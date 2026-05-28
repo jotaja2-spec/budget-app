@@ -45,12 +45,27 @@ def _celsius_to_f(c: float) -> float:
 
 
 def _match_city(text: str) -> Optional[str]:
+    """
+    Match city name from event title to a known city.
+    Checks config.CITIES aliases first, then falls back to dynamic lookup.
+    Returns the canonical city name to use as the lookup key.
+    """
+    from city_lookup import get_city_data
+
     t = text.lower().strip()
+
+    # Check config aliases with word-boundary matching
     for city_name, city_data in config.CITIES.items():
         for alias in city_data["aliases"]:
-            # Exact match OR whole-word match — prevents "la" matching "manila"
             if alias == t or re.search(r"\b" + re.escape(alias) + r"\b", t):
                 return city_name
+
+    # Fall back to dynamic geocoding for unknown cities
+    # Use the raw text as the city name (it comes from Polymarket's event title)
+    city_data = get_city_data(text.strip())
+    if city_data:
+        return text.strip()  # use the Polymarket name as the key
+
     return None
 
 

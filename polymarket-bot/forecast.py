@@ -37,7 +37,8 @@ def fetch_ensemble_highs(city: str, target_date: date) -> Optional[list[float]]:
     if _is_cache_valid(key):
         return _forecast_cache[key]
 
-    city_data = config.CITIES.get(city)
+    from city_lookup import get_city_data
+    city_data = get_city_data(city)
     if not city_data:
         bot_logger.warning(f"forecast: unknown city '{city}'")
         return None
