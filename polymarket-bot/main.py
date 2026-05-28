@@ -24,6 +24,18 @@ CPU_WARN_PCT = 60
 CPU_THROTTLE_PCT = 80
 
 
+def _already_running() -> bool:
+    """Return True if another bot instance is already running."""
+    if not os.path.exists(PID_FILE):
+        return False
+    try:
+        with open(PID_FILE) as f:
+            pid = int(f.read().strip())
+        return psutil.pid_exists(pid)
+    except Exception:
+        return False
+
+
 def _write_pid():
     with open(PID_FILE, "w") as f:
         f.write(str(os.getpid()))
@@ -181,6 +193,11 @@ def _shutdown(signum=None, frame=None):
 
 
 def main():
+    if _already_running():
+        print("ERROR: Bot is already running. Only one instance allowed.")
+        print(f"Check your system tray or use 'Stop Polymarket Trading' first.")
+        sys.exit(1)
+
     _write_pid()
     signal.signal(signal.SIGTERM, _shutdown)
 
