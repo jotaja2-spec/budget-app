@@ -203,8 +203,10 @@ def api_status():
         "date": risk.get("date", "—"),
         "has_data": bool(paper),
         "bot_running": _bot_running(),
-        "cpu_pct": round(cpu, 1),
-        "mem_pct": round(mem.percent, 1),
+        "cpu_pct":     round(cpu, 1),
+        "mem_pct":     round(mem.percent, 1),
+        "wins":        len([p for p in paper.get("closed_positions", []) if p.get("pnl", 0) > 0]),
+        "losses":      len([p for p in paper.get("closed_positions", []) if p.get("pnl", 0) <= 0]),
     })
 
 
@@ -259,6 +261,23 @@ def api_shutdown():
 def api_positions():
     paper = _read_json(PAPER_STATE)
     return jsonify(paper.get("open_positions", []))
+
+
+@app.route("/api/results")
+def api_results():
+    """Settled (closed) positions with win/loss and P&L."""
+    paper  = _read_json(PAPER_STATE)
+    closed = paper.get("closed_positions", [])
+    closed_sorted = sorted(closed, key=lambda p: p.get("settled_at", ""), reverse=True)
+    wins   = sum(1 for p in closed if p.get("pnl", 0) > 0)
+    losses = sum(1 for p in closed if p.get("pnl", 0) <= 0)
+    return jsonify({
+        "positions": closed_sorted[:50],
+        "total":     len(closed),
+        "wins":      wins,
+        "losses":    losses,
+        "win_rate":  round(wins / len(closed) * 100, 1) if closed else None,
+    })
 
 
 @app.route("/api/trades")

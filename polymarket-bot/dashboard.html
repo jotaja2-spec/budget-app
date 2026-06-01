@@ -279,6 +279,14 @@
     <div class="value neu" id="stat-trades">—</div>
   </div>
   <div class="stat-card">
+    <div class="label">Win / Loss</div>
+    <div class="value neu" id="stat-winloss">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Win Rate</div>
+    <div class="value neu" id="stat-winrate">—</div>
+  </div>
+  <div class="stat-card">
     <div class="label">Daily Limit</div>
     <div class="value" id="stat-limit">—</div>
   </div>
@@ -305,10 +313,10 @@
 
   <div class="panel">
     <div class="panel-header">
-      Recent Trades
-      <span class="count" id="trades-count">0</span>
+      Settled Results
+      <span class="count" id="results-count">0</span>
     </div>
-    <div class="table-wrap" id="trades-body"><div class="empty">No trades yet</div></div>
+    <div class="table-wrap" id="results-body"><div class="empty">No settled trades yet</div></div>
   </div>
 
   <div class="panel panel-full">
@@ -426,6 +434,20 @@
       $('stat-open').textContent = d.open_positions;
       $('stat-trades').textContent = d.total_trades;
 
+      // Win / Loss stats
+      const wins   = d.wins   ?? 0;
+      const losses = d.losses ?? 0;
+      const total  = wins + losses;
+      $('stat-winloss').innerHTML =
+        `<span class="pos">${wins}W</span> / <span class="neg">${losses}L</span>`;
+      if (total > 0) {
+        const wr = (wins / total * 100).toFixed(0);
+        $('stat-winrate').className = 'value ' + (wr >= 55 ? 'pos' : wr >= 45 ? 'warn' : 'neg');
+        $('stat-winrate').textContent = `${wr}%`;
+      } else {
+        $('stat-winrate').textContent = '—';
+      }
+
       const limitUsd = d.starting_bankroll * 0.20;
       $('stat-limit').innerHTML = `<span class="${-d.daily_pnl >= limitUsd * 0.8 ? 'neg' : 'neu'}">$${limitUsd.toFixed(2)}</span>`;
 
@@ -482,28 +504,33 @@ $('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
     } catch(e) {}
   }
 
-  async function fetchTrades() {
+  async function fetchResults() {
     if (_shutdownInProgress) return;
     try {
-      const r = await fetch('/api/trades');
-      const trades = await r.json();
-      $('trades-count').textContent = trades.length;
-      if (!trades.length) {
-        $('trades-body').innerHTML = '<div class="empty">No trades yet</div>';
+      const r = await fetch('/api/results');
+      const d = await r.json();
+      $('results-count').textContent = d.total || 0;
+      if (!d.positions || !d.positions.length) {
+        $('results-body').innerHTML = '<div class="empty">No settled trades yet</div>';
         return;
       }
-      const rows = trades.slice(0, 20).map(t => `
+      const rows = d.positions.slice(0, 20).map(p => {
+        const won = p.pnl > 0;
+        const resultBadge = won
+          ? `<span style="color:var(--green);font-weight:700;">WIN</span>`
+          : `<span style="color:var(--red);font-weight:700;">LOSS</span>`;
+        return `
         <tr>
-          <td style="color:var(--muted);font-size:11px;">${t.ts.slice(11,19)}</td>
-          <td>${t.city}</td>
-          <td>${dirBadge(t.direction)}</td>
-          <td>$${t.size.toFixed(2)}</td>
-          <td>${(t.price * 100).toFixed(1)}¢</td>
-          <td>${pct(t.edge)}</td>
-        </tr>`).join('');
-      $('trades-body').innerHTML = `
+          <td>${p.city}</td>
+          <td>${dirBadge(p.direction)}</td>
+          <td>${resultBadge}</td>
+          <td class="${won ? 'pos' : 'neg'}">${won ? '+' : ''}$${(p.pnl||0).toFixed(2)}</td>
+          <td style="color:var(--muted);font-size:11px;">${(p.settled_at||'').slice(0,10)}</td>
+        </tr>`;
+      }).join('');
+      $('results-body').innerHTML = `
         <table>
-          <thead><tr><th>Time</th><th>City</th><th>Dir</th><th>Size</th><th>Price</th><th>Edge</th></tr></thead>
+          <thead><tr><th>City</th><th>Bet</th><th>Result</th><th>P&L</th><th>Date</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>`;
     } catch(e) {}
@@ -525,7 +552,7 @@ $('last-update').textContent = 'Updated ' + new Date().toLocaleTimeString();
   }
 
   async function refresh() {
-    await Promise.all([fetchStatus(), fetchPositions(), fetchTrades(), fetchLogs()]);
+    await Promise.all([fetchStatus(), fetchPositions(), fetchResults(), fetchLogs()]);
   }
 
   // Show phone access URL

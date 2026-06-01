@@ -71,6 +71,7 @@ from economic_signals import generate_economic_signals
 from sizing import kelly_size
 from risk import RiskManager
 from paper_trading import PaperTrader
+from settler import check_and_settle
 from notifications import notify_startup, notify_trade, notify_daily_loss_limit
 
 if not config.PAPER_TRADING:
@@ -226,6 +227,13 @@ def main():
                 run_scan_cycle(paper_trader, risk)
             except Exception as e:
                 log_error("Unhandled error in scan cycle", e)
+
+            # Check if any open positions have resolved
+            if config.PAPER_TRADING and paper_trader.open_position_count > 0:
+                try:
+                    check_and_settle(paper_trader)
+                except Exception as e:
+                    log_error("Error checking settlements", e)
 
             print_status(paper_trader, risk)
 
