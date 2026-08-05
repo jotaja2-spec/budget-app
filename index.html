@@ -30,6 +30,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 .bnav-item svg{width:22px;height:22px}
 .bnav-fab{position:fixed;bottom:calc(var(--nav-h) + var(--safe-b) + 16px);right:max(20px,calc(50% - 280px));width:60px;height:60px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 24px rgba(108,99,255,.6);z-index:200;transition:transform .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .bnav-fab:active{transform:scale(.92)}
+.refresh-bar{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:600px;height:3px;background:linear-gradient(90deg,transparent,var(--accent),transparent);background-size:200% 100%;animation:refreshSlide 1.1s linear infinite;z-index:300}
+@keyframes refreshSlide{from{background-position:200% 0}to{background-position:-200% 0}}
 /* Cards */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
 .card-sm{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px}
@@ -812,13 +814,17 @@ function AuthScreen({onAuth}){
       if(mode==='login'){
         const{data,error}=await db.auth.signInWithPassword({email,password:pass});
         if(error) throw error;
-        // Check if MFA is required
-        if(data.session===null&&data.user===null){
-          // MFA challenge needed
+        // signInWithPassword always succeeds at AAL1 even with MFA enrolled — it never returns a
+        // null session, so that can't be used to detect "needs second factor". Check the actual
+        // assurance level instead: aal1->aal2 pending means a TOTP challenge is still required
+        // before this session should be treated as fully signed in.
+        const{data:aal}=await db.auth.mfa.getAuthenticatorAssuranceLevel();
+        if(aal?.currentLevel==='aal1'&&aal?.nextLevel==='aal2'){
           const factors=await db.auth.mfa.listFactors();
           const totp=factors.data?.totp?.[0];
           if(totp){
-            const{data:challenge}=await db.auth.mfa.challenge({factorId:totp.id});
+            const{data:challenge,error:chErr}=await db.auth.mfa.challenge({factorId:totp.id});
+            if(chErr) throw chErr;
             setMfaFactorId({factorId:totp.id,challengeId:challenge.id});
             setBusy(false);return;
           }
@@ -1200,6 +1206,7 @@ function CashFlowCard({data}){
 function SpendingInsights({data}){
   const{transactions=[],budget_targets=[]}=data;
   const now=new Date();
+  const dayOfMonth=now.getDate();
   const mKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const lm=new Date(now.getFullYear(),now.getMonth()-1,1);
   const lmKey=`${lm.getFullYear()}-${String(lm.getMonth()+1).padStart(2,'0')}`;
@@ -1207,7 +1214,12 @@ function SpendingInsights({data}){
   transactions.forEach(t=>{
     if(t.type==='income') return;
     if(t.date?.startsWith(mKey)) thisM[t.category]=(thisM[t.category]||0)+parseFloat(t.amount||0);
-    if(t.date?.startsWith(lmKey)) lastM[t.category]=(lastM[t.category]||0)+parseFloat(t.amount||0);
+    // Only count last month's spend through the SAME day-of-month as today, so "up/down vs last
+    // month" compares like-for-like instead of a partial current month against a full prior month
+    // (which used to generate false "down vs last month" praise every day before the month ended).
+    if(t.date?.startsWith(lmKey)&&parseInt(t.date.slice(8,10))<=dayOfMonth){
+      lastM[t.category]=(lastM[t.category]||0)+parseFloat(t.amount||0);
+    }
   });
   const insights=[];
   Object.entries(thisM).forEach(([cat,spent])=>{
@@ -1344,7 +1356,11 @@ function YearInReview({data}){
   const topCats=Object.entries(catSpend).sort((a,b)=>b[1]-a[1]).slice(0,5);
   const monthlySpend={};
   ytdTx.forEach(t=>{const mk=t.date?.slice(0,7);if(mk) monthlySpend[mk]=(monthlySpend[mk]||0)+parseFloat(t.amount||0)});
-  const months=Object.entries(monthlySpend).sort((a,b)=>a[0].localeCompare(b[0]));
+  // Exclude the current in-progress month from best/worst — it almost always "wins" lowest simply
+  // for having the fewest days of data so far, which isn't a meaningful comparison against full months.
+  const nowD=new Date();
+  const curMonthKey=`${nowD.getFullYear()}-${String(nowD.getMonth()+1).padStart(2,'0')}`;
+  const months=Object.entries(monthlySpend).filter(([mk])=>mk!==curMonthKey).sort((a,b)=>a[0].localeCompare(b[0]));
   const bestMonth=months.length?months.reduce((b,m)=>m[1]<b[1]?m:b):null;
   const worstMonth=months.length?months.reduce((w,m)=>m[1]>w[1]?m:w):null;
   return(
@@ -1392,15 +1408,16 @@ function YearInReview({data}){
 function DashTab({data,uid,onAdd,onAddIncome,onTrans,toast_}){
   const{transactions=[],fixed_items=[],income_events=[],accounts=[],categories=[],settings=[],savings_goals=[],debts=[]}=data;
 
-  // Current month
+  // Current month — bounded to the month key, not just ">= start", so a stray future-dated
+  // transaction can't bleed into "this month" here while calcCashFlow (same screen) excludes it.
   const now=new Date();
-  const mStart=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
-  const mTx=transactions.filter(t=>t.date>=mStart&&t.type!=='income');
+  const mKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const mTx=transactions.filter(t=>t.date?.startsWith(mKey));
   const mSpend=mTx.reduce((s,t)=>s+parseFloat(t.amount||0),0);
 
   // Income this month
   const mIncome=income_events
-    .filter(e=>e.date>=mStart)
+    .filter(e=>e.date?.startsWith(mKey))
     .reduce((s,e)=>s+parseFloat(e.amount||0),0);
 
   // Last paycheck
@@ -1433,13 +1450,18 @@ function DashTab({data,uid,onAdd,onAddIncome,onTrans,toast_}){
     .map(f=>({...f,status:computeFixedItemStatus(f,transactions,debts,todayStr)}))
     .filter(f=>f.status.status!=='paid');
 
-  // Spending by category donut
+  // Spending by category donut — the ring must sum to exactly mSpend (the number shown in the
+  // center), so anything past the top 6 categories rolls into a synthetic "Other" slice instead of
+  // just being dropped, which previously overstated every visible slice's share of the ring.
   const catSpend={};
   mTx.forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+parseFloat(t.amount||0)});
-  const donutSegs=Object.entries(catSpend).map(([cat,val])=>{
+  const catEntries=Object.entries(catSpend).map(([cat,val])=>{
     const c=categories.find(x=>x.name===cat);
     return{label:cat,value:val,color:c?.color||'#6c63ff'};
-  }).sort((a,b)=>b.value-a.value).slice(0,6);
+  }).sort((a,b)=>b.value-a.value);
+  const donutSegs=catEntries.slice(0,6);
+  const otherTotal=catEntries.slice(6).reduce((s,c)=>s+c.value,0);
+  if(otherTotal>0) donutSegs.push({label:'Other',value:otherTotal,color:'#636e72'});
 
   return(
     <div>
@@ -1602,7 +1624,13 @@ function TxRow({t,categories,accounts,toast_,reload}){
   );
 
   return(
-    <div className="card-sm" style={{marginBottom:8,display:'flex',alignItems:'center',gap:12,cursor:'pointer'}} onClick={()=>setEditing(true)}>
+    <div className="card-sm" style={{marginBottom:8,display:'flex',alignItems:'center',gap:12,cursor:'pointer'}} onClick={()=>{
+      // Re-seed from current props right as the editor opens (not a stale mount-time snapshot) —
+      // Plaid can now push amount/date corrections onto an already-imported transaction (see the
+      // sync's "modified" handling), so a row sitting mounted in a long list can go stale underneath.
+      setDesc(t.description||'');setAmt(t.amount||'');setCat(t.category||'');setAcct(t.account||'');setDate(t.date||'');
+      setEditing(true);
+    }}>
       <div style={{fontSize:22}}>{c?.emoji||'📦'}</div>
       <div style={{flex:1}}>
         <div style={{fontWeight:600,fontSize:15}}>{t.description}</div>
@@ -1737,8 +1765,8 @@ function BudgetTab({data,uid,toast_,reload}){
   const[drillCat,setDrillCat]=useState(null); // category drill-down
 
   const now=new Date();
-  const mStart=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
-  const mTx=transactions.filter(t=>t.date>=mStart&&t.type!=='income');
+  const mKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const mTx=transactions.filter(t=>t.date?.startsWith(mKey));
 
   const catSpend={};
   mTx.forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+parseFloat(t.amount||0)});
@@ -2315,9 +2343,9 @@ function TrendsTab({data}){
 
   // Top categories this month
   const now=new Date();
-  const mStart=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+  const curMKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const catTotals={};
-  transactions.filter(t=>t.date>=mStart&&t.type!=='income').forEach(t=>{
+  transactions.filter(t=>t.date?.startsWith(curMKey)).forEach(t=>{
     catTotals[t.category]=(catTotals[t.category]||0)+parseFloat(t.amount||0);
   });
   const topCats=Object.entries(catTotals).map(([cat,val])=>{
@@ -2325,12 +2353,16 @@ function TrendsTab({data}){
     return{label:cat,value:val,color:c?.color||'#6c63ff'};
   }).sort((a,b)=>b.value-a.value).slice(0,6);
 
-  const avgMonthly=months6.reduce((s,m)=>s+m.spend,0)/months6.filter(m=>m.spend>0).length||0;
+  // Excludes the current in-progress month — including it dragged the average down (and made it
+  // creep upward all month long) since a month with only a few days of data isn't comparable to a
+  // full month.
+  const completeMonths=months6.slice(0,-1).filter(m=>m.spend>0);
+  const avgMonthly=completeMonths.length?completeMonths.reduce((s,m)=>s+m.spend,0)/completeMonths.length:0;
 
   return(
     <div>
       <div className="grid2">
-        <MCard label="Avg Monthly" val={fmt(avgMonthly)} sub="last 6 months" color="var(--amber)"/>
+        <MCard label="Avg Monthly" val={fmt(avgMonthly)} sub="complete months" color="var(--amber)"/>
         <MCard label="Total Logged" val={transactions.filter(t=>t.type!=='income').length} sub="transactions"/>
       </div>
 
@@ -2674,7 +2706,7 @@ function PlaidItemRow({item,toast_,reload}){
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <div style={{color:'var(--green)',fontSize:12,fontWeight:600}}>✓</div>
-        <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>Rename</button>
+        <button className="btn btn-ghost btn-sm" onClick={()=>{setName(item.institution_name);setEditing(true);}}>Rename</button>
         <button className="btn btn-danger btn-sm" onClick={async()=>{
           if(!window.confirm(`Disconnect ${item.institution_name}?`)) return;
           await db.from('plaid_items').delete().eq('id',item.id);
@@ -2813,7 +2845,14 @@ function AccountRow({account,toast_,reload}){
   );
 
   return(
-    <div className="row-item" style={{cursor:'pointer'}} onClick={()=>setEditing(true)}>
+    <div className="row-item" style={{cursor:'pointer'}} onClick={()=>{
+      // Re-seed the editor from the current props right as it opens — not a stale mount-time
+      // snapshot — since a background Plaid sync can update this account's balance at any time
+      // while this row is sitting mounted in the list, and saving with a stale value would silently
+      // overwrite the freshly-synced balance.
+      setBal(account.balance||0);setName(account.name||'');setType(account.type||'checking');
+      setEditing(true);
+    }}>
       <div className="row-left">
         <div style={{fontWeight:600}}>{account.name}</div>
         <div style={{fontSize:12,color:'var(--muted)'}}>{account.type||'account'} · tap to edit</div>
@@ -3057,12 +3096,14 @@ function App(){
   const[user,setUser]=useState(undefined);
   const[session,setSession]=useState(null);
   const[data,setData]=useState(null);
-  const[loading,setLoading]=useState(false);
+  const[loading,setLoading]=useState(false); // blocks with the full-page spinner — first load only
+  const[refreshing,setRefreshing]=useState(false); // background reload — data stays visible, no unmount
   const[tab,setTab]=useState('dash');
   const[showAdd,setShowAdd]=useState(false);
   const[showIncome,setShowIncome]=useState(false);
   const[showClaim,setShowClaim]=useState(false);
   const[needsSetup,setNeedsSetup]=useState(false);
+  const syncedOnceRef=useRef(false); // Plaid auto-sync fires once per session, not on every save-triggered reload
   const{toast_,ToastContainer}=useToast();
 
   // Auth listener
@@ -3087,18 +3128,27 @@ function App(){
 
   async function loadAll(){
     if(!user) return;
-    setLoading(true);
+    // Only the very first load blocks with the full-page spinner. Every later reload — triggered
+    // after any save across any tab — used to flip this same flag and unmount the whole app to a
+    // spinner, which bounced the user back to a tab's default sub-view and lost scroll position
+    // after every single edit. Now it refreshes data in place instead.
+    const isFirstLoad=data===null;
+    if(isFirstLoad) setLoading(true); else setRefreshing(true);
     try{
       const ns=await D.needsSetup(user.id);
-      if(ns){setNeedsSetup(true);setLoading(false);return;}
+      if(ns){setNeedsSetup(true);setLoading(false);setRefreshing(false);return;}
       setNeedsSetup(false);
       let d=await D.getAll(user.id);
       // Auto-log any missed paychecks silently
       const logged=await autoLogPaychecks(d,user.id);
       if(logged) d=await D.getAll(user.id);
       setData(d);
-      // Auto-sync Plaid if banks are connected
-      if(d.plaid_items?.length>0){
+      // Auto-sync Plaid once per session on the initial load only — not on every save-triggered
+      // reload, which previously fired a full Plaid sync call for something as small as renaming
+      // an account. The Settings > Banks "Sync Now" button and the 6am scheduled sync still cover
+      // on-demand and background refresh.
+      if(d.plaid_items?.length>0&&!syncedOnceRef.current){
+        syncedOnceRef.current=true;
         const sess=await db.auth.getSession();
         const token=sess.data.session?.access_token;
         if(token){
@@ -3119,6 +3169,7 @@ function App(){
       setShowClaim(hasLeg);
     }catch(e){toast_('Failed to load data','error');}
     setLoading(false);
+    setRefreshing(false);
   }
 
   async function handleLogout(){
@@ -3127,8 +3178,8 @@ function App(){
     setUser(null);
   }
 
-  // Loading spinner
-  if(user===undefined||loading){
+  // Full-page loading spinner — only while there is no data at all to show yet.
+  if(user===undefined||(loading&&data===null)){
     return(
       <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}}>
         <div style={{fontSize:40}}>💰</div>
@@ -3165,6 +3216,7 @@ function App(){
 
   return(
     <div className="app-wrap">
+      {refreshing&&<div className="refresh-bar"/>}
       <ToastContainer/>
       {showAdd&&<AddModal uid={user.id} categories={data.categories||[]} accounts={accounts} quickLog={qItems} onSave={async()=>{setShowAdd(false);await loadAll();}} onClose={()=>setShowAdd(false)} toast_={toast_}/>}
       {showIncome&&<IncomeModal uid={user.id} accounts={accounts} onSave={async()=>{setShowIncome(false);await loadAll();}} onClose={()=>setShowIncome(false)} toast_={toast_}/>}
