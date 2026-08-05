@@ -180,16 +180,30 @@ const addDays=(d,n)=>{const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt.
 const monthLabel=d=>new Date(d+'T12:00').toLocaleDateString('en-US',{month:'short',year:'2-digit'});
 const dayLabel=d=>new Date(d+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
 
+function daysInMonth(y,m){return new Date(y,m+1,0).getDate();} // m is 0-indexed
+function clampDay(y,m,day){return Math.min(day,daysInMonth(y,m));} // handles due_day=31 in a 30-day month
+function addMonthsClamped(dateStr,months){
+  const[y,m,d]=dateStr.split('-').map(Number);
+  const totalM=(m-1)+months;
+  const ny=y+Math.floor(totalM/12);
+  const nm=((totalM%12)+12)%12;
+  return`${ny}-${String(nm+1).padStart(2,'0')}-${String(clampDay(ny,nm,d)).padStart(2,'0')}`;
+}
+// Returns the next due date as a YYYY-MM-DD string. Compares date-only (not timestamps), so a bill
+// due "today" stays due today all day instead of jumping to next month at any hour past midnight.
 function nextDueDate(dayOfMonth){
   const now=new Date();
   const y=now.getFullYear(),m=now.getMonth();
-  let d=new Date(y,m,dayOfMonth);
-  if(d<=now) d=new Date(y,m+1,dayOfMonth);
-  return d;
+  const todayStr=today();
+  let dd=`${y}-${String(m+1).padStart(2,'0')}-${String(clampDay(y,m,dayOfMonth)).padStart(2,'0')}`;
+  if(dd<todayStr) dd=addMonthsClamped(dd,1);
+  return dd;
 }
-function daysUntil(date){
-  const diff=new Date(date)-new Date();
-  return Math.ceil(diff/(1000*60*60*24));
+// Date-only day difference (no time-of-day drift). Accepts a YYYY-MM-DD string.
+function daysUntil(dateStr){
+  const[y1,m1,d1]=today().split('-').map(Number);
+  const[y2,m2,d2]=dateStr.split('-').map(Number);
+  return Math.round((Date.UTC(y2,m2-1,d2)-Date.UTC(y1,m1-1,d1))/86400000);
 }
 
 function calcSinglePayoff(balance,monthlyPayment,annualRate){
@@ -384,13 +398,13 @@ const D={
 
 /* ── Feature Helpers ── */
 function calcCashFlow(data){
-  const{transactions=[],income_events=[],fixed_items=[],settings=[]}=data;
+  const{transactions=[],income_events=[],fixed_items=[],settings=[],debts=[]}=data;
   const now=new Date();
   const y=now.getFullYear(),m=now.getMonth();
   const mKey=`${y}-${String(m+1).padStart(2,'0')}`;
   const todayStr=today();
   const incomeThisMonth=income_events.filter(e=>e.date?.startsWith(mKey)).reduce((s,e)=>s+parseFloat(e.amount||0),0);
-  const spentThisMonth=transactions.filter(t=>t.date?.startsWith(mKey)&&t.type!=='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const spentThisMonth=transactions.filter(t=>t.date?.startsWith(mKey)).reduce((s,t)=>s+parseFloat(t.amount||0),0);
   const freq=settings.find(s=>(s.key||s.id)==='pay_frequency')?.value||'semimonthly';
   const perCheck=parseFloat(settings.find(s=>(s.key||s.id)==='pay_per_check')?.value||0)||0;
   let remainingPaychecks=0;
@@ -400,11 +414,16 @@ function calcCashFlow(data){
     if(p1>todayStr) remainingPaychecks++;
     if(p15>todayStr) remainingPaychecks++;
   }
-  const billsRemaining=fixed_items.filter(f=>{
-    if(!f.due_day||!f.amount) return false;
-    const dd=`${y}-${String(m+1).padStart(2,'0')}-${String(f.due_day).padStart(2,'0')}`;
-    return dd>todayStr&&dd.startsWith(mKey);
-  }).reduce((s,f)=>s+parseFloat(f.amount||0),0);
+  // Bills not yet confirmed paid this cycle — includes bills with no due_day (previously dropped
+  // entirely, understating what's left to spend) and debt-linked bills (which can't be confirmed
+  // paid via a transaction match, so they're conservatively always counted until the cycle rolls over).
+  const billsRemaining=fixed_items
+    .filter(f=>f.active!==false&&f.amount)
+    .filter(f=>{
+      const st=computeFixedItemStatus(f,transactions,debts,todayStr).status;
+      return st!=='paid'&&st!=='inactive';
+    })
+    .reduce((s,f)=>s+parseFloat(f.amount||0),0);
   return{incomeThisMonth,expectedIncome:incomeThisMonth+remainingPaychecks*perCheck,spentThisMonth,billsRemaining,remainingPaychecks,projected:(incomeThisMonth+remainingPaychecks*perCheck)-spentThisMonth-billsRemaining,perCheck};
 }
 
@@ -416,38 +435,134 @@ function calcNetWorth(data){
   return{assets,liabilities:standaloneCC+debtLiabilities,netWorth:assets-standaloneCC-debtLiabilities};
 }
 
+// Cadence classification: instead of locking group membership to a fixed amount (which breaks the
+// chain the moment a bill's price changes) and instead of trusting "seen in 2+ months" (which false-
+// positives on frequently-visited stores like Amazon/Walmart), this clusters the GAPS between
+// occurrences and requires them to consistently match one calendar cadence. A merchant visited at
+// random intervals will not cluster around any single gap and is correctly excluded.
+const CADENCES=[
+  {key:'weekly',days:7,tol:2},
+  {key:'biweekly',days:14,tol:3},
+  {key:'monthly',days:30,tol:5},
+  {key:'quarterly',days:91,tol:10},
+  {key:'annual',days:365,tol:15},
+];
+const CADENCE_LABEL={weekly:'Weekly',biweekly:'Biweekly',monthly:'Monthly',quarterly:'Quarterly',annual:'Annual'};
+
+function detectCadence(dateStrs){
+  const uniq=[...new Set(dateStrs)].sort();
+  if(uniq.length<2) return null;
+  const gaps=[];
+  for(let i=1;i<uniq.length;i++){
+    gaps.push(Math.round((new Date(uniq[i]+'T12:00')-new Date(uniq[i-1]+'T12:00'))/86400000));
+  }
+  let best=null;
+  for(const c of CADENCES){
+    const minGaps=c.key==='annual'?1:2; // annual: 2 occurrences is as much confidence as we can ask for; others need 3+
+    if(gaps.length<minGaps) continue;
+    const matches=gaps.filter(g=>Math.abs(g-c.days)<=c.tol).length;
+    const ratio=matches/gaps.length;
+    if(ratio>=0.6&&(!best||ratio>best.ratio)) best={cadence:c.key,intervalDays:c.days,ratio};
+  }
+  return best;
+}
+function predictNextOccurrence(lastDateStr,cadenceInfo){
+  if(!cadenceInfo) return null;
+  switch(cadenceInfo.cadence){
+    case 'weekly': return addDays(lastDateStr,7);
+    case 'biweekly': return addDays(lastDateStr,14);
+    case 'monthly': return addMonthsClamped(lastDateStr,1);
+    case 'quarterly': return addMonthsClamped(lastDateStr,3);
+    case 'annual': return addMonthsClamped(lastDateStr,12);
+    default: return addDays(lastDateStr,cadenceInfo.intervalDays);
+  }
+}
+function median(arr){
+  const s=[...arr].sort((a,b)=>a-b);
+  const mid=Math.floor(s.length/2);
+  return s.length%2?s[mid]:(s[mid-1]+s[mid])/2;
+}
+
 function findRecurring(transactions){
-  // Group by description + exact amount (within $0.50) — finds true subscriptions
   const groups={};
   transactions.forEach(t=>{
-    if(!t.amount||!t.date||parseFloat(t.amount)<=0) return;
+    if(!t.amount||!t.date||parseFloat(t.amount)<=0) return; // credits/refunds aren't recurring charges
     const desc=(t.description||'').toUpperCase().replace(/[^A-Z0-9 ]/g,'').replace(/\s+/g,' ').trim().slice(0,30);
     if(desc.length<3) return;
-    const amt=parseFloat(t.amount);
-    const month=t.date.slice(0,7);
-    // Find existing group with same desc and amount within $0.50
-    const key=Object.keys(groups).find(k=>{
-      const g=groups[k];
-      return g.desc===desc&&Math.abs(g.amount-amt)<=0.50;
-    });
-    if(key){
-      groups[key].months.add(month);
-      groups[key].occurrences++;
-    } else {
-      const gk=`${desc}__${amt}`;
-      groups[gk]={desc,amount:amt,months:new Set([month]),occurrences:1,category:t.category};
-    }
+    if(!groups[desc]) groups[desc]={desc,dates:[],amounts:[],category:t.category};
+    groups[desc].dates.push(t.date);
+    groups[desc].amounts.push(parseFloat(t.amount));
+    groups[desc].category=t.category;
   });
+
   return Object.values(groups)
-    .filter(g=>g.months.size>=2) // appeared in at least 2 different months
-    .map(g=>({
-      desc:g.desc.charAt(0)+g.desc.slice(1).toLowerCase(),
-      amount:g.amount,
-      months:g.months.size,
-      category:g.category,
-    }))
-    .sort((a,b)=>b.amount-a.amount)
-    .slice(0,15);
+    .map(g=>{
+      const cadenceInfo=detectCadence(g.dates);
+      if(!cadenceInfo) return null; // gaps don't cluster around any cadence -> not recurring (fixes false positives)
+      const uniqDates=[...new Set(g.dates)].sort();
+      const lastSeen=uniqDates[uniqDates.length-1];
+      const nextDue=predictNextOccurrence(lastSeen,cadenceInfo);
+      const graceDays=Math.max(5,Math.round(cadenceInfo.intervalDays*0.3));
+      const missed=daysUntil(nextDue)<-graceDays;
+      const typicalAmount=median(g.amounts);
+      const lastAmount=g.amounts[g.dates.lastIndexOf(lastSeen)]??g.amounts[g.amounts.length-1];
+      const minAmt=Math.min(...g.amounts),maxAmt=Math.max(...g.amounts);
+      const drifting=(maxAmt-minAmt)>Math.max(1,typicalAmount*0.1);
+      const monthlyEquivalent=cadenceInfo.cadence==='annual'?typicalAmount/12
+        :cadenceInfo.cadence==='quarterly'?typicalAmount/3
+        :cadenceInfo.cadence==='weekly'?typicalAmount*4.33
+        :cadenceInfo.cadence==='biweekly'?typicalAmount*2.17
+        :typicalAmount;
+      return{
+        desc:g.desc.charAt(0)+g.desc.slice(1).toLowerCase(),
+        category:g.category,
+        cadence:cadenceInfo.cadence,
+        cadenceLabel:CADENCE_LABEL[cadenceInfo.cadence]||cadenceInfo.cadence,
+        occurrences:uniqDates.length,
+        lastSeen,nextDue,typicalAmount,lastAmount,minAmt,maxAmt,drifting,missed,monthlyEquivalent,
+      };
+    })
+    .filter(Boolean)
+    .sort((a,b)=>b.monthlyEquivalent-a.monthlyEquivalent)
+    .slice(0,20);
+}
+
+// Matches a fixed bill against this cycle's transactions by amount (with tolerance) + category/account.
+function matchBillTransaction(item,transactions,mStart,todayStr){
+  const monthTx=transactions.filter(t=>t.date>=mStart&&t.date<=todayStr);
+  const amt=parseFloat(item.amount)||0;
+  const tolerance=Math.max(3,amt*0.15);
+  return monthTx.find(t=>{
+    if(Math.abs(parseFloat(t.amount)-amt)>tolerance) return false;
+    const catMatch=item.category&&t.category===item.category;
+    const acctMatch=item.account&&(t.account||'').toLowerCase().includes(item.account.toLowerCase());
+    return catMatch||acctMatch||(!item.category&&!item.account);
+  });
+}
+// Verifies whether a manually-tracked fixed bill was actually paid this cycle, instead of just
+// displaying its scheduled amount blindly. Bills linked to a debt (House Payment, JCP Card, Student
+// Loans, BOA Card, Chase Card) can't be confirmed via transaction match — the payment transactions are
+// intentionally excluded from the ledger (see plaid-sync) to avoid double-counting the card purchases
+// as spend twice — so those defer to the debt's own balance instead of guessing "paid" from a match
+// that will never exist. Bills WITH a due_day still get a real calendar countdown either way.
+function computeFixedItemStatus(item,transactions,debts,todayStr){
+  if(item.active===false) return{status:'inactive'};
+  const linkedDebt=item.linked_debt_id?(debts||[]).find(x=>x.id===item.linked_debt_id):null;
+  const[y,m]=todayStr.split('-').map(Number);
+  const mStart=`${y}-${String(m).padStart(2,'0')}-01`;
+
+  if(item.due_day){
+    const dueDate=nextDueDate(parseInt(item.due_day));
+    const daysAway=daysUntil(dueDate);
+    if(linkedDebt) return{status:daysAway<0?'overdue':'upcoming',dueDate,daysAway,debtName:linkedDebt.name,debtBalance:linkedDebt.current_balance,unverifiable:true};
+    const matched=matchBillTransaction(item,transactions,mStart,todayStr);
+    if(matched) return{status:'paid',matched,dueDate,daysAway};
+    return{status:daysAway<0?'overdue':'upcoming',dueDate,daysAway};
+  }
+  if(linkedDebt) return{status:'tracked_via_debt',debtName:linkedDebt.name,debtBalance:linkedDebt.current_balance};
+  const matched=matchBillTransaction(item,transactions,mStart,todayStr);
+  if(matched) return{status:'paid',matched};
+  return{status:parseInt(todayStr.split('-')[2])>=25?'due_soon':'expected'};
 }
 
 function calcRollover(cat,budget_targets,transactions){
@@ -1180,20 +1295,29 @@ function RecurringSection({data}){
   },[allRecurring,fixed_items]);
   if(!recurring.length) return null;
   const shown=expanded?recurring:recurring.slice(0,5);
-  const totalMonthly=recurring.reduce((s,r)=>s+r.amount,0);
+  const totalMonthly=recurring.reduce((s,r)=>s+r.monthlyEquivalent,0);
   return(
     <div className="card" style={{marginBottom:12}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
         <div style={{fontWeight:700,fontSize:16}}>🔁 Recurring Charges</div>
-        <div style={{fontSize:13,color:'var(--muted)',fontWeight:600}}>{fmt(totalMonthly)}/mo</div>
+        <div style={{fontSize:13,color:'var(--muted)',fontWeight:600}}>~{fmt(totalMonthly)}/mo</div>
       </div>
       {shown.map((r,i)=>(
         <div key={i} className="row-item">
           <div className="row-left">
-            <div style={{fontWeight:600,fontSize:14}}>{r.desc}</div>
-            <div style={{fontSize:11,color:'var(--muted)'}}>{r.category||'Uncategorized'} · seen {r.months} months</div>
+            <div style={{fontWeight:600,fontSize:14,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+              {r.desc}
+              {r.missed&&<span className="chip" style={{background:'rgba(255,92,107,.15)',color:'var(--red)',fontSize:9,padding:'2px 6px'}}>NOT SEEN RECENTLY</span>}
+            </div>
+            <div style={{fontSize:11,color:'var(--muted)'}}>
+              {r.cadenceLabel} · {r.category||'Uncategorized'} · next ~{dayLabel(r.nextDue)}
+              {r.drifting&&<span style={{color:'var(--amber)'}}> · {fmt(r.minAmt)}–{fmt(r.maxAmt)}</span>}
+            </div>
           </div>
-          <div style={{fontWeight:700}}>{fmt(r.amount)}/mo</div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontWeight:700}}>{fmt(r.lastAmount)}</div>
+            <div style={{fontSize:10,color:'var(--muted)'}}>last charge</div>
+          </div>
         </div>
       ))}
       {recurring.length>5&&<button className="btn btn-ghost btn-sm" onClick={()=>setExpanded(e=>!e)} style={{marginTop:8,width:'100%'}}>
@@ -1263,7 +1387,7 @@ function YearInReview({data}){
    DASH TAB
 ══════════════════════════════════════════════ */
 function DashTab({data,uid,onAdd,onAddIncome,onTrans,toast_}){
-  const{transactions=[],fixed_items=[],income_events=[],accounts=[],categories=[],settings=[],savings_goals=[]}=data;
+  const{transactions=[],fixed_items=[],income_events=[],accounts=[],categories=[],settings=[],savings_goals=[],debts=[]}=data;
 
   // Current month
   const now=new Date();
@@ -1294,16 +1418,17 @@ function DashTab({data,uid,onAdd,onAddIncome,onTrans,toast_}){
   else if(net/mIncome<0.1){statusColor='amber';statusMsg=`Almost even — ${fmt(net)} remaining`;statusIcon='📊';}
   else{statusMsg=`${fmt(net)} ahead this month`;statusIcon='✅';}
 
-  // Upcoming bills
+  // Upcoming bills — split into calendar-day bills and no-due-day bills so neither silently disappears
   const todayStr=today();
   const upcoming=fixed_items
-    .filter(f=>f.due_day&&f.amount>0)
-    .map(f=>{
-      const dd=nextDueDate(parseInt(f.due_day));
-      return{...f,nextDue:dd,daysAway:daysUntil(dd)};
-    })
-    .filter(f=>f.daysAway<=14)
-    .sort((a,b)=>a.daysAway-b.daysAway);
+    .filter(f=>f.active!==false&&f.amount>0&&f.due_day)
+    .map(f=>({...f,status:computeFixedItemStatus(f,transactions,debts,todayStr)}))
+    .filter(f=>f.status.status!=='paid'&&f.status.daysAway<=14)
+    .sort((a,b)=>a.status.daysAway-b.status.daysAway);
+  const noDueDayBills=fixed_items
+    .filter(f=>f.active!==false&&f.amount>0&&!f.due_day)
+    .map(f=>({...f,status:computeFixedItemStatus(f,transactions,debts,todayStr)}))
+    .filter(f=>f.status.status!=='paid');
 
   // Spending by category donut
   const catSpend={};
@@ -1345,16 +1470,25 @@ function DashTab({data,uid,onAdd,onAddIncome,onTrans,toast_}){
       <button className="btn btn-ghost" onClick={onTrans} style={{marginBottom:16,width:'100%'}}>📋 View &amp; Edit Transactions</button>
 
       {/* Upcoming bills */}
-      {upcoming.length>0&&(
+      {(upcoming.length>0||noDueDayBills.length>0)&&(
         <div className="card">
-          <div className="section-title">⏰ Coming Up (14 days)</div>
+          <div className="section-title">⏰ Coming Up</div>
           {upcoming.map((f,i)=>(
-            <div key={i} className="bill-row">
+            <div key={'d'+i} className="bill-row">
+              <div className="bill-info">
+                <div className="bill-name">{f.name}{f.status.unverifiable&&<span style={{fontSize:10,color:'var(--muted)'}}> · via Debts</span>}</div>
+                <div className={`bill-due${f.status.status==='overdue'?' bill-overdue':f.status.daysAway<=7?' bill-soon':''}`}>
+                  {f.status.status==='overdue'?`Overdue by ${-f.status.daysAway}d`:f.status.daysAway===0?'Due today':f.status.daysAway===1?'Due tomorrow':`Due in ${f.status.daysAway} days`} · {f.account||''}
+                </div>
+              </div>
+              <div className="bill-amt">{fmt(f.amount)}</div>
+            </div>
+          ))}
+          {noDueDayBills.map((f,i)=>(
+            <div key={'n'+i} className="bill-row">
               <div className="bill-info">
                 <div className="bill-name">{f.name}</div>
-                <div className={`bill-due${f.daysAway<=3?' bill-overdue':f.daysAway<=7?' bill-soon':''}`}>
-                  {f.daysAway===0?'Due today':f.daysAway===1?'Due tomorrow':`Due in ${f.daysAway} days`} · {f.account||''}
-                </div>
+                <div className="bill-due">{f.status.status==='tracked_via_debt'?'Tracked via Debts':f.status.status==='due_soon'?'Due soon':'Expected this month'} · {f.account||''}</div>
               </div>
               <div className="bill-amt">{fmt(f.amount)}</div>
             </div>
@@ -1592,7 +1726,7 @@ function IncomeTab({data,uid,onAdd,toast_,reload}){
    BUDGET TAB
 ══════════════════════════════════════════════ */
 function BudgetTab({data,uid,toast_,reload}){
-  const{transactions=[],categories=[],budget_targets=[],fixed_items=[],settings=[]}=data;
+  const{transactions=[],categories=[],budget_targets=[],fixed_items=[],settings=[],debts=[]}=data;
   const[sub,setSub]=useState('spend');
   const[editBudget,setEditBudget]=useState(null);
   const[editFixed,setEditFixed]=useState(null);
@@ -1607,7 +1741,7 @@ function BudgetTab({data,uid,toast_,reload}){
   mTx.forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+parseFloat(t.amount||0)});
 
   const budgeted=budget_targets.reduce((s,b)=>s+parseFloat(b.monthly_amount||0),0);
-  const totalFixed=fixed_items.reduce((s,f)=>s+parseFloat(f.amount||0),0);
+  const totalFixed=fixed_items.filter(f=>f.active!==false).reduce((s,f)=>s+parseFloat(f.amount||0),0);
 
   async function saveBudget(cat,amt){
     await D.setBudget(cat,parseFloat(amt)||0,uid);
@@ -1691,9 +1825,9 @@ function BudgetTab({data,uid,toast_,reload}){
           </div>
           {fixed_items.length===0&&<Empty h="No fixed bills" msg="Add recurring bills to track them on your calendar." icon="📅"/>}
           {fixed_items.map(f=>(
-            <FixedItemRow key={f.id} item={f} uid={uid} toast_={toast_} reload={reload}/>
+            <FixedItemRow key={f.id} item={f} uid={uid} debts={debts} transactions={transactions} toast_={toast_} reload={reload}/>
           ))}
-          {newFixed&&<FixedItemForm uid={uid} onSave={async()=>{setNewFixed(false);await reload();}} onCancel={()=>setNewFixed(false)} toast_={toast_}/>}
+          {newFixed&&<FixedItemForm uid={uid} debts={debts} onSave={async()=>{setNewFixed(false);await reload();}} onCancel={()=>setNewFixed(false)} toast_={toast_}/>}
         </div>
       )}
     </div>
@@ -1711,19 +1845,37 @@ function BudgetInlineEdit({cat,current,onSave,onCancel}){
   );
 }
 
-function FixedItemRow({item,uid,toast_,reload}){
+const STATUS_CHIP={
+  paid:{label:'✓ Paid',color:'var(--green)',bg:'rgba(74,222,128,.12)'},
+  overdue:{label:'Overdue',color:'var(--red)',bg:'rgba(255,92,107,.12)'},
+  upcoming:{label:'Upcoming',color:'var(--blue)',bg:'rgba(56,189,248,.12)'},
+  due_soon:{label:'Due soon',color:'var(--amber)',bg:'rgba(255,184,77,.12)'},
+  expected:{label:'Expected',color:'var(--muted)',bg:'rgba(124,130,153,.12)'},
+  tracked_via_debt:{label:'Via Debts',color:'var(--accent2)',bg:'rgba(0,212,170,.12)'},
+  inactive:{label:'Inactive',color:'var(--muted)',bg:'rgba(124,130,153,.1)'},
+};
+
+function FixedItemRow({item,uid,debts=[],transactions=[],toast_,reload}){
   const[editing,setEditing]=useState(false);
+  const status=useMemo(()=>computeFixedItemStatus(item,transactions,debts,today()),[item,transactions,debts]);
+  const chip=STATUS_CHIP[status.status]||STATUS_CHIP.expected;
   async function del(){
     await D.deleteFixedItem(item.id);
     toast_('Removed','success');
     await reload();
   }
-  if(editing) return<FixedItemForm uid={uid} item={item} onSave={async()=>{setEditing(false);await reload();}} onCancel={()=>setEditing(false)} toast_={toast_}/>;
+  if(editing) return<FixedItemForm uid={uid} item={item} debts={debts} onSave={async()=>{setEditing(false);await reload();}} onCancel={()=>setEditing(false)} toast_={toast_}/>;
   return(
-    <div className="card-sm" style={{marginBottom:8,display:'flex',alignItems:'center',gap:12}}>
+    <div className="card-sm" style={{marginBottom:8,display:'flex',alignItems:'center',gap:12,opacity:item.active===false?0.55:1}}>
       <div style={{flex:1}}>
-        <div style={{fontWeight:600}}>{item.name}</div>
-        <div style={{fontSize:12,color:'var(--muted)'}}>Due day {item.due_day||'?'} · {item.account||''} · {item.category||''}</div>
+        <div style={{fontWeight:600,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+          {item.name}
+          <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:10,color:chip.color,background:chip.bg}}>{chip.label}</span>
+        </div>
+        <div style={{fontSize:12,color:'var(--muted)'}}>
+          {item.due_day?`Due day ${item.due_day}`:'No fixed day'} · {item.account||''} · {item.category||''}
+          {status.debtName&&` · ${status.debtName} balance ${fmt(status.debtBalance)}`}
+        </div>
       </div>
       <div style={{textAlign:'right'}}>
         <div style={{fontWeight:700}}>{fmt(item.amount)}</div>
@@ -1736,18 +1888,21 @@ function FixedItemRow({item,uid,toast_,reload}){
   );
 }
 
-function FixedItemForm({uid,item,onSave,onCancel,toast_}){
+function FixedItemForm({uid,item,debts=[],onSave,onCancel,toast_}){
   const[name,setName]=useState(item?.name||'');
   const[amt,setAmt]=useState(item?.amount||'');
   const[day,setDay]=useState(item?.due_day||'');
   const[acct,setAcct]=useState(item?.account||'');
   const[cat,setCat]=useState(item?.category||'');
+  const[active,setActive]=useState(item?.active!==false);
+  const[linkedDebtId,setLinkedDebtId]=useState(item?.linked_debt_id||'');
   const[saving,setSaving]=useState(false);
   async function save(){
     if(!name||!amt){toast_('Name and amount required','error');return;}
     setSaving(true);
-    if(item?.id){await D.updateFixedItem(item.id,{name,amount:parseFloat(amt),due_day:parseInt(day)||null,account:acct,category:cat});}
-    else{await D.addFixedItem({name,amount:parseFloat(amt),due_day:parseInt(day)||null,account:acct,category:cat},uid);}
+    const changes={name,amount:parseFloat(amt),due_day:parseInt(day)||null,account:acct,category:cat,active,linked_debt_id:linkedDebtId||null};
+    if(item?.id){await D.updateFixedItem(item.id,changes);}
+    else{await D.addFixedItem(changes,uid);}
     toast_('Saved','success');await onSave();setSaving(false);
   }
   return(
@@ -1761,6 +1916,20 @@ function FixedItemForm({uid,item,onSave,onCancel,toast_}){
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
         <div className="field"><label>Account</label><input value={acct} onChange={e=>setAcct(e.target.value)} placeholder="Checking"/></div>
         <div className="field"><label>Category</label><input value={cat} onChange={e=>setCat(e.target.value)} placeholder="Housing"/></div>
+      </div>
+      <div className="field">
+        <label>Link to Debt (optional)</label>
+        <select value={linkedDebtId} onChange={e=>setLinkedDebtId(e.target.value)}>
+          <option value="">None — track by transaction match</option>
+          {debts.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+        {linkedDebtId&&<div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>Payment can't be confirmed from transactions (card payoff payments aren't imported to avoid double-counting spend) — this bill's status will follow the debt's due date instead.</div>}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16,cursor:'pointer'}} onClick={()=>setActive(a=>!a)}>
+        <div style={{width:20,height:20,borderRadius:4,border:`2px solid ${active?'var(--accent)':'var(--border)'}`,background:active?'var(--accent)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+          {active&&<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+        </div>
+        <span style={{fontSize:14,color:'var(--muted)',userSelect:'none'}}>Active (counted in bills & forecast)</span>
       </div>
       <div style={{display:'flex',gap:8}}>
         <button className="btn btn-primary btn-sm" onClick={save} disabled={saving} style={{flex:1}}>{saving?'Saving…':'Save'}</button>
