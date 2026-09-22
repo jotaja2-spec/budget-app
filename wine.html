@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#14090f">
+<title>Palate — Wine Tracker</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#14090f;--surface:#20131a;--surface2:#2c1b25;--border:#3d2633;
+  --text:#f2e9ee;--muted:#a18d98;--accent:#c2405f;--accent2:#e0b44c;
+  --red:#ff5c6b;--amber:#ffb84d;--green:#4ade80;--blue:#38bdf8;--purple:#a78bfa;
+  --radius:14px;--radius-sm:10px;--nav-h:64px;--safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:16px;overscroll-behavior:none}
+#root{height:100%;display:flex;flex-direction:column}
+.app-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;max-width:600px;margin:0 auto;width:100%}
+.main-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 16px calc(var(--nav-h) + var(--safe-b) + 90px);-webkit-overflow-scrolling:touch}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 4px;max-width:600px;margin:0 auto;width:100%}
+.topbar h1{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.topbar .sub{font-size:12px;color:var(--muted);font-weight:500}
+/* Bottom nav */
+.bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:600px;height:calc(var(--nav-h) + var(--safe-b));background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-around;padding-top:8px;padding-bottom:var(--safe-b);z-index:100}
+.bnav-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 6px;border:none;background:none;color:var(--muted);cursor:pointer;font-size:10px;font-weight:600;flex:1;transition:color .15s}
+.bnav-item.active{color:var(--accent)}
+.bnav-item .ic{font-size:19px;line-height:1}
+.fab{position:fixed;bottom:calc(var(--nav-h) + var(--safe-b) + 18px);right:max(18px,calc(50% - 282px));height:54px;padding:0 22px;border-radius:27px;background:var(--accent);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;font-family:inherit;box-shadow:0 6px 26px rgba(194,64,95,.5);z-index:120;transition:transform .12s}
+.fab:active{transform:scale(.95)}
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.card.tight{padding:13px}
+.section-title{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:22px 0 9px}
+.section-title:first-child{margin-top:4px}
+.muted{color:var(--muted)}
+.tiny{font-size:12px}
+.empty{text-align:center;padding:40px 20px;color:var(--muted)}
+.empty .big{font-size:44px;margin-bottom:12px}
+.empty h3{color:var(--text);font-size:17px;margin-bottom:6px}
+.empty p{font-size:14px;line-height:1.5}
+/* Buttons */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 20px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;transition:opacity .15s,transform .1s;width:100%}
+.btn:active{transform:scale(.98)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-ghost{background:none;color:var(--muted);border:1px solid var(--border)}
+.btn-danger{background:rgba(255,92,107,.14);color:var(--red);border:1px solid rgba(255,92,107,.3)}
+.btn-sm{padding:9px 14px;font-size:13px;width:auto}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-row{display:flex;gap:10px}
+/* Forms */
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--muted)}
+.field input,.field select,.field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;color:var(--text);font-size:16px;font-family:inherit;outline:none;transition:border-color .15s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+.field textarea{resize:vertical;min-height:70px}
+.field select option{background:var(--surface)}
+/* Option buttons (the heart of the quiz) */
+.opt{display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:9px;cursor:pointer;color:var(--text);font-family:inherit;transition:border-color .12s,background .12s,transform .08s}
+.opt:active{transform:scale(.99)}
+.opt.sel{border-color:var(--accent);background:rgba(194,64,95,.14)}
+.opt .oe{font-size:24px;line-height:1.1;flex-shrink:0;width:28px;text-align:center}
+.opt .ot{display:block;font-size:15px;font-weight:700;line-height:1.25}
+.opt .od{display:block;font-size:13px;color:var(--muted);margin-top:3px;line-height:1.35}
+.opt .chk{margin-left:auto;font-size:16px;color:var(--accent);flex-shrink:0}
+/* Wizard */
+.wiz{position:fixed;inset:0;background:var(--bg);z-index:300;display:flex;flex-direction:column}
+.wiz-head{padding:14px 16px 10px;border-bottom:1px solid var(--border);max-width:600px;margin:0 auto;width:100%}
+.wiz-head-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.wiz-x{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;padding:2px 6px;line-height:1}
+.wiz-step{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.05em}
+.wiz-body{flex:1;overflow-y:auto;padding:20px 16px 24px;max-width:600px;margin:0 auto;width:100%;-webkit-overflow-scrolling:touch}
+.wiz-foot{padding:12px 16px calc(12px + var(--safe-b));border-top:1px solid var(--border);display:flex;gap:10px;max-width:600px;margin:0 auto;width:100%;background:var(--surface)}
+.wiz-q{font-size:21px;font-weight:800;line-height:1.28;margin-bottom:6px;letter-spacing:-.01em}
+.wiz-help{font-size:14px;color:var(--muted);margin-bottom:18px;line-height:1.45}
+.prog{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.prog-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s ease}
+/* Wine row */
+.wrow{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:11px;margin-bottom:10px;cursor:pointer;width:100%;text-align:left;color:var(--text);font-family:inherit}
+.wrow:active{background:var(--surface2)}
+.wthumb{width:52px;height:68px;border-radius:8px;object-fit:cover;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:24px;border:1px solid var(--border)}
+.wrow-main{flex:1;min-width:0}
+.wrow-name{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wrow-sub{font-size:12.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wrow-score{font-size:19px;flex-shrink:0;text-align:center;line-height:1.1}
+.wrow-score .n{display:block;font-size:10px;color:var(--muted);font-weight:700;margin-top:1px}
+/* Chips */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;font-size:12.5px;font-weight:600;background:var(--surface2);border:1px solid var(--border);color:var(--text)}
+.chip.good{background:rgba(74,222,128,.13);border-color:rgba(74,222,128,.32);color:var(--green)}
+.chip.bad{background:rgba(255,92,107,.13);border-color:rgba(255,92,107,.32);color:var(--red)}
+.chip.gold{background:rgba(224,180,76,.13);border-color:rgba(224,180,76,.32);color:var(--accent2)}
+.tab-pills{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.tab-pills::-webkit-scrollbar{display:none}
+.tab-pill{padding:8px 15px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit}
+.tab-pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+/* Scale meter */
+.meter{margin-bottom:15px}
+.meter-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.meter-label{font-size:14px;font-weight:700}
+.meter-val{font-size:12.5px;color:var(--accent2);font-weight:700}
+.meter-track{height:8px;background:var(--border);border-radius:4px;position:relative;overflow:hidden}
+.meter-band{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,rgba(194,64,95,.75),rgba(224,180,76,.85));border-radius:4px}
+.meter-ends{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;font-weight:600}
+.meter-note{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.4}
+/* Confidence */
+.conf{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:5px;margin-left:7px;vertical-align:middle}
+.conf.hi{background:rgba(74,222,128,.16);color:var(--green)}
+.conf.mid{background:rgba(255,184,77,.16);color:var(--amber)}
+.conf.lo{background:rgba(161,141,152,.16);color:var(--muted)}
+/* Pick card */
+.pick{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px}
+.pick-top{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.pick-name{font-size:16px;font-weight:800;flex:1;line-height:1.2}
+.pick-match{font-size:13px;font-weight:800;color:var(--accent2);flex-shrink:0}
+.pick-why{font-size:13.5px;color:var(--muted);line-height:1.45;margin-bottom:9px}
+.pick-say{background:var(--bg);border:1px dashed var(--border);border-radius:9px;padding:10px 12px;font-size:13.5px;line-height:1.45}
+.pick-say b{color:var(--accent2)}
+/* Detail */
+.dtl-photo{width:100%;max-height:300px;object-fit:contain;border-radius:var(--radius);background:var(--surface2);margin-bottom:14px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);font-size:14px}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--muted);font-weight:600}
+.kv .v{font-weight:700;text-align:right}
+/* Toast */
+.toast-wrap{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:999;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:calc(100% - 32px);max-width:400px}
+.toast{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;font-size:14px;font-weight:600;box-shadow:0 4px 24px rgba(0,0,0,.5);animation:slideIn .2s ease}
+.toast.success{border-color:rgba(74,222,128,.4);color:var(--green)}
+.toast.error{border-color:rgba(255,92,107,.4);color:var(--red)}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.photo-btn{width:100%;border:1.5px dashed var(--border);background:var(--surface);border-radius:var(--radius);padding:26px 16px;color:var(--muted);font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px}
+.photo-btn .pe{font-size:34px}
+.photo-prev{position:relative;margin-bottom:12px}
+.photo-prev img{width:100%;max-height:260px;object-fit:contain;border-radius:var(--radius);background:var(--surface2)}
+.photo-prev .rm{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.65);border:1px solid var(--border);color:#fff;border-radius:18px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:13px}
+.stat .l{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.stat .v{font-size:23px;font-weight:800;margin-top:3px}
+.stat .s{font-size:12px;color:var(--muted);margin-top:1px}
+.banner{border-radius:var(--radius);padding:13px 15px;margin-bottom:12px;font-size:13.5px;line-height:1.5;background:rgba(224,180,76,.1);border:1px solid rgba(224,180,76,.28);color:var(--accent2)}
+.banner b{display:block;margin-bottom:3px;font-size:14px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const {useState,useEffect,useRef,useMemo,useCallback} = React;
+
+/* ============================================================
+   THE QUESTION BANK
+   Every question is plain English. No wine words required.
+   Each answer quietly maps to a real tasting axis 0-3.
+   ============================================================ */
+
+const TYPES = [
+  {id:'red',      e:'🍷', t:'Red'},
+  {id:'white',    e:'🥂', t:'White'},
+  {id:'rose',     e:'🌸', t:'Rosé'},
+  {id:'sparkling',e:'🍾', t:'Sparkling / bubbly'},
+  {id:'dessert',  e:'🍯', t:'Dessert / port'},
+];
+
+const AXES = {
+  sweet:  {label:'Sweetness',    lo:'Bone dry',   hi:'Dessert sweet',
+           words:['bone dry','dry with a touch of fruit','noticeably sweet','dessert sweet']},
+  acid:   {label:'Tartness',     lo:'Soft / round',hi:'Zippy & tart',
+           words:['soft and round','gently refreshing','crisp and tart','mouth-puckering']},
+  tannin: {label:'Grip (dryness)',lo:'Silky',      hi:'Very grippy',
+           words:['silky, no grip','a little grip','firm and grippy','big chewy grip']},
+  body:   {label:'Weight',       lo:'Light',      hi:'Rich & full',
+           words:['light-bodied','medium-bodied','full-bodied','big and heavy']},
+  oak:    {label:'Oak / vanilla', lo:'None',       hi:'Very oaky',
+           words:['no oak','a touch of oak','clearly oaky','heavily oaked']},
+  booze:  {label:'Alcohol warmth',lo:'Easy',       hi:'Hot',
+           words:['easy, no burn','slight warmth','warming','hot / boozy']},
+  finish: {label:'Finish length',lo:'Short',      hi:'Long',
+           words:['short finish','medium finish','long finish','very long finish']},
+};
+
+const QUESTIONS = [
+  {
+    id:'sweet', axis:'sweet', kind:'one',
+    q:'First sip — how sweet is it?',
+    help:'Sweet means actual sugar on your tongue, not fruit smell. Grape juice is sweet; a dry wine can taste fruity with zero sugar.',
+    opts:[
+      {e:'🚫', t:'Not sweet at all', d:'Tastes like fruit, but no sugar whatsoever', v:0},
+      {e:'🍋', t:'Barely a hint',    d:'Just a whisper of sweetness, mostly dry',   v:1},
+      {e:'🍯', t:'Definitely sweet', d:'Like lightly sweetened tea',                v:2},
+      {e:'🍮', t:'Dessert sweet',    d:'Syrupy, sweet like soda or maple',          v:3},
+    ]
+  },
+  {
+    id:'acid', axis:'acid', kind:'one',
+    q:'Does it make your mouth water?',
+    help:'Take a sip, swallow, then notice the sides of your tongue. Lemonade makes you water a lot. Milk does not at all.',
+    opts:[
+      {e:'😐', t:'Not really',        d:'Feels soft, round, maybe a little flat',    v:0},
+      {e:'🙂', t:'A little',          d:'Mildly refreshing, easy to drink',          v:1},
+      {e:'😋', t:'Yes, it is zippy',  d:'Tart and crisp, like a green apple',        v:2},
+      {e:'😖', t:'A LOT',             d:'Sour like lemon, almost sharp',             v:3},
+    ]
+  },
+  {
+    id:'tannin', axis:'tannin', kind:'one',
+    when:w=>w.type!=='white'&&w.type!=='sparkling',
+    q:'After you swallow, how does your mouth feel?',
+    help:'This is the thing that makes strong black tea feel drying. It has nothing to do with taste — it is a texture.',
+    opts:[
+      {e:'💧', t:'Smooth, nothing grabs', d:'Slides right down, silky',                     v:0},
+      {e:'🧸', t:'Slightly fuzzy gums',   d:'A gentle grip, like weak tea',                 v:1},
+      {e:'🧦', t:'Dry and grippy',        d:'Like a cotton ball or strong tea — cheeks stick', v:2},
+      {e:'🪵', t:'Really drying',         d:'Teeth feel chalky, mouth feels stripped',      v:3},
+    ]
+  },
+  {
+    id:'body', axis:'body', kind:'one',
+    q:'How heavy does it feel in your mouth?',
+    help:'Ignore flavor completely. This is pure weight and thickness — the difference between skim milk and heavy cream.',
+    opts:[
+      {e:'💧', t:'Light, like water',   d:'Thin, easy, disappears fast',   v:0},
+      {e:'🥛', t:'Medium, like milk',   d:'Some substance, not heavy',     v:1.5},
+      {e:'🍶', t:'Rich, like cream',    d:'Thick, coats your mouth',       v:3},
+    ]
+  },
+  {
+    id:'fruit', kind:'many', tagGroup:'fruit',
+    q:'Which fruit is it closest to?',
+    help:'Pick any that fit, or skip it. You are not being graded — a rough guess still teaches the app something.',
+    opts:[
+      {e:'🍓', tag:'red_fruit',   t:'Red fruit',    d:'Strawberry, cherry, raspberry'},
+      {e:'🫐', tag:'dark_fruit',  t:'Dark fruit',   d:'Blackberry, plum, black cherry'},
+      {e:'🍇', tag:'jammy',       t:'Jammy / raisin',d:'Cooked, dried, syrupy fruit'},
+      {e:'🍋', tag:'citrus',      t:'Citrus',       d:'Lemon, lime, grapefruit'},
+      {e:'🍏', tag:'orchard',     t:'Apple / pear', d:'Green apple, pear, quince'},
+      {e:'🍑', tag:'stone',       t:'Peach',        d:'Peach, apricot, nectarine'},
+      {e:'🥭', tag:'tropical',    t:'Tropical',     d:'Pineapple, mango, melon'},
+    ]
+  },
+  {
+    id:'notes', kind:'many', tagGroup:'note',
+    q:'Anything going on besides fruit?',
+    help:'These are the extras that come from barrels, aging, or the grape itself. Pick what you notice — or say it is just fruit.',
+    opts:[
+      {e:'🍦', tag:'oak',     t:'Vanilla / caramel / toast', d:'That sweet, woody, baked note', axis:'oak', v:3},
+      {e:'🧈', tag:'butter',  t:'Buttery, creamy',           d:'Like movie popcorn or cream soda'},
+      {e:'🔥', tag:'pepper',  t:'Peppery, smoky',            d:'Black pepper, campfire, bacon'},
+      {e:'🍄', tag:'earthy',  t:'Earthy, mushroomy',         d:'Forest floor, damp soil, leather'},
+      {e:'🌿', tag:'green',   t:'Grassy, herbal',            d:'Fresh-cut grass, bell pepper, mint'},
+      {e:'🌸', tag:'floral',  t:'Floral, perfumey',          d:'Roses, honeysuckle, potpourri'},
+      {e:'🪨', tag:'mineral', t:'Stony, salty',              d:'Wet rock, chalk, sea air'},
+      {e:'🥖', tag:'bready',  t:'Bready, yeasty',            d:'Fresh dough, biscuit (common in bubbly)'},
+      {e:'🚫', tag:'none',    t:'Just fruit, nothing else',  d:'Simple and straightforward', solo:true},
+    ]
+  },
+  {
+    id:'booze', axis:'booze', kind:'one',
+    q:'Any burn going down?',
+    help:'A warm feeling in your chest or the back of your throat means higher alcohol.',
+    opts:[
+      {e:'❄️', t:'None',            d:'Smooth, no heat at all',            v:0},
+      {e:'🙂', t:'A little warmth', d:'Pleasant, barely noticeable',       v:1.5},
+      {e:'🔥', t:'Noticeable burn', d:'Warms the chest, a bit like liquor', v:3},
+    ]
+  },
+  {
+    id:'finish', axis:'finish', kind:'one',
+    q:'After you swallow, the taste…',
+    help:'Count the seconds. Some wines vanish instantly; some hang around for half a minute.',
+    opts:[
+      {e:'💨', t:'Vanishes right away', d:'Gone in a second or two',          v:0},
+      {e:'⏱️', t:'Hangs around',        d:'Lingers maybe 5–10 seconds',       v:1.5},
+      {e:'♾️', t:'Sticks with you',     d:'Still tasting it 20+ seconds later', v:3},
+    ]
+  },
+  {
+    id:'rating', kind:'rating',
+    q:'Gut check — would you drink this again?',
+    help:'This is the most important question in the whole app. Everything else gets ranked against your honest answer here, so do not overthink it.',
+    opts:[
+      {e:'🤮', t:'Poured it out',        d:'Could not finish it',                      v:1},
+      {e:'😕', t:'Finished it, but no',  d:'Drinkable, would not buy again',           v:2},
+      {e:'😐', t:'Fine, forgettable',    d:'Nothing wrong, nothing special',           v:3},
+      {e:'😊', t:'Really liked it',      d:'Would happily have it again',              v:4},
+      {e:'🤩', t:'Loved it',             d:'Buying this again, remember the label',    v:5},
+    ]
+  },
+  {
+    id:'why_bad', kind:'one', when:w=>!!w.rating && w.rating<=3,
+    q:'What bugged you most about it?',
+    help:'Pick the single biggest turn-off. This becomes a hard filter on your recommendations.',
+    opts:[
+      {e:'🍬', t:'Too sweet',              d:'Sugary, cloying',                  v:'too_sweet'},
+      {e:'🏜️', t:'Not sweet enough',       d:'Harsh, wanted more fruit sweetness', v:'too_dry'},
+      {e:'🍋', t:'Too sour',               d:'Sharp, acidic, hurt a little',     v:'too_acid'},
+      {e:'🧦', t:'Too drying / bitter',    d:'Chalky mouth, bitter aftertaste',  v:'too_tannic'},
+      {e:'🪨', t:'Too heavy',              d:'Thick, tiring, too much',          v:'too_heavy'},
+      {e:'💧', t:'Too thin / watery',      d:'Weak, no flavor',                  v:'too_thin'},
+      {e:'🔥', t:'Too boozy',              d:'Burned going down',                v:'too_boozy'},
+      {e:'🪵', t:'Too woody / vanilla',    d:'Tasted like a barrel or a candle', v:'too_oaky'},
+      {e:'🍄', t:'Funky or weird',         d:'Barnyard, medicinal, off flavors', v:'too_funky'},
+      {e:'😴', t:'Just boring',            d:'Nothing wrong, nothing there',     v:'boring'},
+      {e:'🤷', t:'Nothing specific',       d:'Just did not do it for me',        v:'none'},
+    ]
+  },
+  {
+    id:'why_good', kind:'one', when:w=>!!w.rating && w.rating>=4,
+    q:'What made it good?',
+    help:'Pick the one thing you would mention if a friend asked why you liked it.',
+    opts:[
+      {e:'🧈', t:'How smooth it was',   d:'Easy, no grip, no burn',        v:'smooth'},
+      {e:'🍓', t:'The fruit flavor',    d:'Juicy and fruity',              v:'fruity'},
+      {e:'❄️', t:'Crisp and refreshing',d:'Clean, thirst-quenching',       v:'crisp'},
+      {e:'🍫', t:'Rich and bold',       d:'Big, mouth-filling, serious',   v:'rich'},
+      {e:'🍬', t:'The sweetness',       d:'Sweet in a good way',           v:'sweet'},
+      {e:'🎭', t:'Lots going on',       d:'Complex, kept changing',        v:'complex'},
+      {e:'🥤', t:'Super easy to drink', d:'Would drink a whole glass fast', v:'easy'},
+    ]
+  },
+];
+
+/* Plain-English labels for tags, used in the profile screen */
+const TAG_LABEL = {
+  red_fruit:'🍓 Red fruit', dark_fruit:'🫐 Dark fruit', jammy:'🍇 Jammy fruit',
+  citrus:'🍋 Citrus', orchard:'🍏 Apple/pear', stone:'🍑 Peach', tropical:'🥭 Tropical',
+  oak:'🍦 Vanilla/oak', butter:'🧈 Buttery', pepper:'🔥 Peppery/smoky', earthy:'🍄 Earthy',
+  green:'🌿 Grassy/herbal', floral:'🌸 Floral', mineral:'🪨 Stony/mineral', bready:'🥖 Bready',
+  none:'Plain fruit',
+};
+const DEALBREAKER_LABEL = {
+  too_sweet:'too sweet', too_dry:'not fruity enough', too_acid:'too sour', too_tannic:'too drying/bitter',
+  too_heavy:'too heavy', too_thin:'too thin', too_boozy:'too boozy', too_oaky:'too oaky',
+  too_funky:'too funky', boring:'boring', none:'nothing specific',
+};
+/* How each dealbreaker reads in the sentence "Nothing ___." */
+const AVOID_PHRASE = {
+  too_sweet:'sweet', too_dry:'bone dry', too_acid:'sour', too_tannic:'drying',
+  too_heavy:'heavy', too_thin:'watery', too_boozy:'boozy',
+  too_oaky:'oaky', too_funky:'funky', boring:'plain',
+};
+const LIKED_LABEL = {
+  smooth:'smoothness', fruity:'fruit flavor', crisp:'crispness', rich:'richness',
+  sweet:'sweetness', complex:'complexity', easy:'easy drinking',
+};
+
+/* ============================================================
+   GRAPE / STYLE DATABASE
+   Each style is scored on the same 0-3 axes the quiz produces,
+   so a profile can be matched against it directly.
+   ============================================================ */
+const STYLES = [
+  // REDS
+  {n:'Pinot Noir', type:'red', sweet:0, acid:2, tannin:1, body:1, oak:1, booze:1.5, finish:1.5,
+   tags:['red_fruit','earthy','floral'], price:'$15–30',
+   say:'a light, smooth red — Pinot Noir from Oregon or California'},
+  {n:'Gamay (Beaujolais)', type:'red', sweet:0, acid:2.5, tannin:0.8, body:0.8, oak:0.2, booze:1, finish:1,
+   tags:['red_fruit','floral'], price:'$12–20',
+   say:'Beaujolais-Villages — the easiest-drinking red on the shelf'},
+  {n:'Merlot', type:'red', sweet:0.3, acid:1.5, tannin:1.5, body:2, oak:1.5, booze:2, finish:1.5,
+   tags:['dark_fruit','oak'], price:'$12–25',
+   say:'a soft Merlot from Washington or Chile'},
+  {n:'Grenache / Garnacha', type:'red', sweet:0.5, acid:1.5, tannin:1.3, body:2, oak:1, booze:2.5, finish:1.5,
+   tags:['red_fruit','jammy','pepper'], price:'$12–22',
+   say:'Spanish Garnacha — juicy and generous, not harsh'},
+  {n:'Tempranillo (Rioja)', type:'red', sweet:0.2, acid:2, tannin:2, body:2, oak:2.3, booze:2, finish:2,
+   tags:['red_fruit','oak','earthy'], price:'$13–28',
+   say:'a Rioja Crianza — vanilla and cherry, medium weight'},
+  {n:'Malbec', type:'red', sweet:0.4, acid:1.5, tannin:2, body:2.5, oak:1.8, booze:2.5, finish:2,
+   tags:['dark_fruit','oak'], price:'$12–22',
+   say:'Argentinian Malbec from Mendoza'},
+  {n:'Zinfandel', type:'red', sweet:1, acid:1.5, tannin:1.8, body:2.8, oak:2, booze:3, finish:2,
+   tags:['jammy','dark_fruit','pepper'], price:'$15–28',
+   say:'a Lodi Zinfandel — big, jammy, slightly sweet-tasting'},
+  {n:'Syrah / Shiraz', type:'red', sweet:0.3, acid:2, tannin:2.3, body:2.8, oak:1.8, booze:2.5, finish:2.5,
+   tags:['dark_fruit','pepper','earthy'], price:'$13–30',
+   say:'Australian Shiraz (bolder) or Northern Rhône Syrah (peppery)'},
+  {n:'Cabernet Sauvignon', type:'red', sweet:0.2, acid:2, tannin:3, body:3, oak:2.3, booze:2.5, finish:2.5,
+   tags:['dark_fruit','oak','pepper'], price:'$15–40',
+   say:'Napa or Paso Robles Cabernet — full, structured, oaky'},
+  {n:'Sangiovese (Chianti)', type:'red', sweet:0, acid:3, tannin:2.5, body:2, oak:1, booze:2, finish:2,
+   tags:['red_fruit','earthy'], price:'$12–25',
+   say:'Chianti Classico — tart cherry, great with red sauce'},
+  {n:'Nebbiolo (Barolo)', type:'red', sweet:0, acid:3, tannin:3, body:2, oak:1.5, booze:2.5, finish:3,
+   tags:['red_fruit','floral','earthy'], price:'$25–60',
+   say:'Nebbiolo from Langhe — pale but powerful and very grippy'},
+  {n:'Petite Sirah', type:'red', sweet:0.3, acid:1.8, tannin:3, body:3, oak:2, booze:2.8, finish:2.5,
+   tags:['dark_fruit','pepper'], price:'$15–30',
+   say:'Petite Sirah — about as big and inky as red gets'},
+  {n:'Sweet red blend', type:'red', sweet:2, acid:1.2, tannin:1, body:2, oak:1.5, booze:1.8, finish:1,
+   tags:['jammy','dark_fruit'], price:'$9–18',
+   say:'a "sweet red blend" — check the back label for "smooth" or "sweet"'},
+  // WHITES
+  {n:'Oaked Chardonnay', type:'white', sweet:0.4, acid:1.5, tannin:0, body:2.7, oak:3, booze:2.2, finish:2,
+   tags:['stone','tropical','butter','oak'], price:'$13–30',
+   say:'a buttery California Chardonnay'},
+  {n:'Unoaked Chardonnay / Chablis', type:'white', sweet:0, acid:2.5, tannin:0, body:1.5, oak:0.2, booze:1.5, finish:1.5,
+   tags:['orchard','citrus','mineral'], price:'$15–30',
+   say:'Chablis, or a Chardonnay labeled "unoaked" / "naked"'},
+  {n:'Sauvignon Blanc', type:'white', sweet:0.2, acid:3, tannin:0, body:1, oak:0, booze:1.3, finish:1.5,
+   tags:['citrus','green','tropical'], price:'$12–25',
+   say:'New Zealand Sauvignon Blanc from Marlborough'},
+  {n:'Pinot Grigio', type:'white', sweet:0.3, acid:2.3, tannin:0, body:1, oak:0, booze:1.3, finish:1,
+   tags:['citrus','orchard'], price:'$10–18',
+   say:'Italian Pinot Grigio — the safe, crisp, neutral white'},
+  {n:'Albariño', type:'white', sweet:0.2, acid:2.7, tannin:0, body:1.2, oak:0, booze:1.5, finish:1.5,
+   tags:['citrus','stone','mineral'], price:'$14–24',
+   say:'Albariño from Rías Baixas in Spain'},
+  {n:'Dry Riesling', type:'white', sweet:0.4, acid:3, tannin:0, body:1, oak:0, booze:1, finish:2,
+   tags:['orchard','citrus','floral','mineral'], price:'$13–25',
+   say:'a Riesling marked "trocken" or "dry" — usually German or from the Finger Lakes'},
+  {n:'Off-dry Riesling', type:'white', sweet:1.7, acid:3, tannin:0, body:1.2, oak:0, booze:0.8, finish:2,
+   tags:['stone','orchard','floral'], price:'$12–22',
+   say:'a German Kabinett Riesling — sweet and tart at the same time'},
+  {n:'Chenin Blanc', type:'white', sweet:1, acid:2.5, tannin:0, body:1.5, oak:0.5, booze:1.5, finish:2,
+   tags:['orchard','stone','floral'], price:'$12–22',
+   say:'South African Chenin Blanc, or Vouvray from France'},
+  {n:'Viognier', type:'white', sweet:0.6, acid:1.3, tannin:0, body:2.5, oak:1.2, booze:2.3, finish:2,
+   tags:['stone','floral','tropical'], price:'$14–26',
+   say:'Viognier — a white that drinks with the weight of a red'},
+  {n:'Gewürztraminer', type:'white', sweet:1.5, acid:1.2, tannin:0, body:2, oak:0, booze:1.8, finish:2,
+   tags:['tropical','floral','stone'], price:'$13–24',
+   say:'Gewürztraminer — intensely floral, lychee and rose'},
+  {n:'Vinho Verde', type:'white', sweet:0.6, acid:3, tannin:0, body:0.5, oak:0, booze:0.3, finish:0.5,
+   tags:['citrus','orchard'], price:'$7–12',
+   say:'Vinho Verde — light, faintly fizzy, very cheap, very easy'},
+  {n:'Moscato', type:'white', sweet:3, acid:1.5, tannin:0, body:1, oak:0, booze:0.3, finish:1,
+   tags:['tropical','floral','stone'], price:'$9–16',
+   say:'Moscato d’Asti — low alcohol, sweet, slightly fizzy'},
+  // ROSÉ + SPARKLING + DESSERT
+  {n:'Provence Rosé', type:'rose', sweet:0.3, acid:2.5, tannin:0.4, body:1, oak:0, booze:1.5, finish:1,
+   tags:['red_fruit','citrus','mineral'], price:'$13–25',
+   say:'a pale, dry rosé from Provence'},
+  {n:'White Zinfandel', type:'rose', sweet:2.3, acid:1.5, tannin:0.2, body:1, oak:0, booze:0.8, finish:1,
+   tags:['red_fruit','stone'], price:'$7–12',
+   say:'White Zinfandel — pink, sweet, and unpretentious'},
+  {n:'Prosecco', type:'sparkling', sweet:1.2, acid:2.5, tannin:0, body:1, oak:0, booze:1, finish:1,
+   tags:['orchard','floral','citrus'], price:'$12–20',
+   say:'Prosecco — say "Extra Dry" for a touch sweeter, "Brut" for drier'},
+  {n:'Brut sparkling (Cava / Champagne)', type:'sparkling', sweet:0.3, acid:3, tannin:0, body:1.5, oak:0.5, booze:1.5, finish:2,
+   tags:['citrus','bready','orchard'], price:'$12–60',
+   say:'a Brut Cava (cheap) or Champagne (splurge) — dry and bready'},
+  {n:'Sparkling rosé', type:'sparkling', sweet:1, acid:2.5, tannin:0.3, body:1.2, oak:0, booze:1.3, finish:1.5,
+   tags:['red_fruit','citrus','bready'], price:'$12–30',
+   say:'a Brut sparkling rosé'},
+  {n:'Port', type:'dessert', sweet:3, acid:1.5, tannin:2, body:3, oak:2, booze:3, finish:3,
+   tags:['jammy','dark_fruit','oak'], price:'$18–40',
+   say:'a Tawny Port — sip it in small pours after dinner'},
+  {n:'Late Harvest / Ice Wine', type:'dessert', sweet:3, acid:2.5, tannin:0, body:2.5, oak:0.5, booze:1.5, finish:3,
+   tags:['stone','tropical','floral'], price:'$20–45 (half bottle)',
+   say:'a late-harvest Riesling or ice wine, sold in half bottles'},
+];
+
+/* ============================================================
+   STORAGE — entries in localStorage, photos in IndexedDB
+   ============================================================ */
+const LS_KEY = 'palate_wines_v1';
+const load = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)||'[]'); } catch(e){ return []; } };
+const save = w => { try { localStorage.setItem(LS_KEY, JSON.stringify(w)); return true; } catch(e){ return false; } };
+
+let _db = null;
+function idb(){
+  if(_db) return _db;
+  _db = new Promise((res,rej)=>{
+    const r = indexedDB.open('palate_photos',1);
+    r.onupgradeneeded = () => { if(!r.result.objectStoreNames.contains('photos')) r.result.createObjectStore('photos'); };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  return _db;
+}
+async function putPhoto(id, dataUrl){
+  try { const db = await idb(); return new Promise((res,rej)=>{
+    const tx = db.transaction('photos','readwrite');
+    tx.objectStore('photos').put(dataUrl, id);
+    tx.oncomplete = ()=>res(true); tx.onerror = ()=>rej(tx.error);
+  }); } catch(e){ return false; }
+}
+async function getPhoto(id){
+  try { const db = await idb(); return new Promise(res=>{
+    const tx = db.transaction('photos','readonly');
+    const rq = tx.objectStore('photos').get(id);
+    rq.onsuccess = ()=>res(rq.result||null); rq.onerror = ()=>res(null);
+  }); } catch(e){ return null; }
+}
+async function delPhoto(id){
+  try { const db = await idb(); return new Promise(res=>{
+    const tx = db.transaction('photos','readwrite');
+    tx.objectStore('photos').delete(id);
+    tx.oncomplete = ()=>res(true); tx.onerror = ()=>res(false);
+  }); } catch(e){ return false; }
+}
+/* Shrink a camera photo to something a phone can store hundreds of */
+function shrink(file, max=760, q=0.72){
+  return new Promise((res,rej)=>{
+    const fr = new FileReader();
+    fr.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let {width:w, height:h} = img;
+        const scale = Math.min(1, max/Math.max(w,h));
+        w = Math.round(w*scale); h = Math.round(h*scale);
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img,0,0,w,h);
+        res(c.toDataURL('image/jpeg', q));
+      };
+      img.onerror = rej;
+      img.src = fr.result;
+    };
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+const today = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10); };
+const prettyDate = s => { if(!s) return ''; const [y,m,d]=s.split('-').map(Number);
+  return new Date(y,m-1,d).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); };
+const STARS = ['','🤮','😕','😐','😊','🤩'];
+
+/* ============================================================
+   PROFILE ENGINE
+   Rating is the ground truth. Every axis is judged by how it
+   separates the wines you rated high from the ones you didn't.
+   ============================================================ */
+const AXIS_W = {sweet:1.5, tannin:1.25, acid:1.15, body:1.0, oak:1.0, booze:0.7, finish:0.45};
+const mean = a => a.reduce((s,x)=>s+x,0)/a.length;
+/* 0-3 value -> one of the four plain-English words for that axis.
+   Banded, not rounded: three-option questions store 1.5 for the middle answer
+   and Math.round would push it into the top band. */
+const axWord = (axis,v) => AXES[axis].words[v<0.6?0 : v<1.7?1 : v<2.5?2 : 3];
+const clamp = (v,lo,hi) => Math.max(lo, Math.min(hi, v));
+
+function axisProfile(wines, axis){
+  const vals = wines.filter(w => typeof w.a[axis]==='number' && w.rating)
+                    .map(w => ({v:w.a[axis], r:w.rating}));
+  if(vals.length < 2) return {status:'unknown', n:vals.length};
+  const liked = vals.filter(x=>x.r>=4), disliked = vals.filter(x=>x.r<=2);
+  let target = null, spread = 1;
+  if(liked.length >= 2){
+    const wsum = liked.reduce((s,x)=>s+(x.r-2),0);
+    target = liked.reduce((s,x)=>s+x.v*(x.r-2),0)/wsum;
+    spread = Math.sqrt(mean(liked.map(x=>(x.v-target)**2)));
+  } else if(liked.length === 1 && vals.length >= 3){
+    target = liked[0].v; spread = 1.1;
+  } else return {status:'need_more', n:vals.length, liked:liked.length};
+  const dis = disliked.length ? mean(disliked.map(x=>x.v)) : null;
+  const sep = dis===null ? null : Math.abs(target-dis);
+  let conf = 'lo';
+  if(liked.length>=3 && spread<=0.95) conf = 'mid';
+  if(liked.length>=5 && spread<=0.8 && (sep===null || sep>=0.6)) conf = 'hi';
+  return {status:'ok', target, spread:clamp(spread,0.35,1.4), dis, sep, conf,
+          n:vals.length, liked:liked.length, disliked:disliked.length};
+}
+
+function tagStats(wines){
+  const rated = wines.filter(w=>w.rating);
+  if(rated.length < 2) return {likes:[], dislikes:[], overall:0};
+  const overall = mean(rated.map(w=>w.rating));
+  const map = {};
+  rated.forEach(w => (w.tags||[]).forEach(t => {
+    if(t==='none') return;
+    (map[t] = map[t] || []).push(w.rating);
+  }));
+  const rows = Object.keys(map).map(t => ({
+    tag:t, n:map[t].length, avg:mean(map[t]), lift:mean(map[t])-overall
+  })).filter(r=>r.n>=2);
+  return {
+    likes: rows.filter(r=>r.lift>=0.35).sort((a,b)=>b.lift-a.lift),
+    dislikes: rows.filter(r=>r.lift<=-0.35).sort((a,b)=>a.lift-b.lift),
+    overall
+  };
+}
+
+function tally(wines, key){
+  const m = {};
+  wines.forEach(w => { const v = w[key]; if(v && v!=='none') m[v] = (m[v]||0)+1; });
+  return Object.keys(m).map(k=>({k, n:m[k]})).sort((a,b)=>b.n-a.n);
+}
+
+function typeStats(wines){
+  const m = {};
+  wines.filter(w=>w.rating).forEach(w => (m[w.type] = m[w.type]||[]).push(w.rating));
+  return Object.keys(m).map(t=>({type:t, n:m[t].length, avg:mean(m[t])}))
+                       .sort((a,b)=>b.avg-a.avg);
+}
+
+function buildProfile(wines){
+  const rated = wines.filter(w=>w.rating);
+  const axes = {};
+  Object.keys(AXES).forEach(a => axes[a] = axisProfile(rated, a));
+  const known = Object.keys(axes).filter(a=>axes[a].status==='ok');
+  const strength = known.reduce((s,a)=>s+(axes[a].conf==='hi'?3:axes[a].conf==='mid'?2:1),0);
+  return {
+    axes, known,
+    tags: tagStats(rated),
+    dealbreakers: tally(rated.filter(w=>w.rating<=3), 'why_bad'),
+    loves: tally(rated.filter(w=>w.rating>=4), 'why_good'),
+    types: typeStats(rated),
+    n: rated.length,
+    ready: rated.length >= 3 && known.length >= 2,
+    strength,
+  };
+}
+
+/* Dealbreakers become hard penalties, not soft nudges */
+const DEALBREAKER_RULES = {
+  too_sweet:  s => s.sweet  > 1.4 ? 26 : 0,
+  too_dry:    s => s.sweet  < 0.3 ? 16 : 0,
+  too_acid:   s => s.acid   > 2.4 ? 20 : 0,
+  too_tannic: s => s.tannin > 1.9 ? 26 : 0,
+  too_heavy:  s => s.body   > 2.3 ? 22 : 0,
+  too_thin:   s => s.body   < 1.1 ? 20 : 0,
+  too_boozy:  s => s.booze  > 2.4 ? 20 : 0,
+  too_oaky:   s => s.oak    > 1.9 ? 24 : 0,
+  too_funky:  s => (s.tags.includes('earthy') ? 18 : 0),
+  boring:     s => (s.finish < 1.2 ? 10 : 0),
+};
+
+function recommend(profile, wines){
+  if(!profile.ready) return [];
+  const tried = new Set(wines.map(w=>(w.style||'').toLowerCase()).filter(Boolean));
+  const likeTags = new Set(profile.tags.likes.map(r=>r.tag));
+  const hateTags = new Set(profile.tags.dislikes.map(r=>r.tag));
+  const dbs = profile.dealbreakers.slice(0,2).map(d=>d.k);
+  const typeAvg = {}; profile.types.forEach(t=>typeAvg[t.type]=t);
+
+  return STYLES.map(s => {
+    let pen = 0, wsum = 0;
+    const hits = [], misses = [];
+    profile.known.forEach(a => {
+      const p = profile.axes[a], w = AXIS_W[a];
+      const cw = w * (p.conf==='hi'?1:p.conf==='mid'?0.8:0.55);
+      const d = Math.abs(s[a] - p.target);
+      pen += cw * d; wsum += cw * 3;
+      if(d <= Math.max(0.5, p.spread) && p.conf!=='lo') hits.push(a);
+      if(d >= 1.6 && p.conf!=='lo') misses.push(a);
+    });
+    let score = wsum ? 100*(1 - pen/wsum) : 50;
+    // reshape so good matches spread out across the top of the range
+    score = 100 - (100-score)*1.35;
+    // and cap the ceiling by how much the profile has actually earned:
+    // three bottles should never produce a 99% match
+    score = Math.min(score, 68 + Math.min(31, profile.strength*2.5));
+    let bonus = 0;
+    s.tags.forEach(t => { if(likeTags.has(t)) bonus += 4.5; if(hateTags.has(t)) bonus -= 8; });
+    dbs.forEach(k => { const f = DEALBREAKER_RULES[k]; if(f) bonus -= f(s); });
+    const ts = typeAvg[s.type];
+    if(ts && ts.n>=2) bonus += (ts.avg - 3) * 5;
+    else if(!ts && profile.n >= 4) bonus -= 4; // never tried this type at all
+    if(tried.has(s.n.toLowerCase())) bonus -= 6;
+    score = clamp(Math.round(score + bonus), 5, 99);
+
+    const why = [];
+    if(hits.length) why.push('hits your sweet spot on ' + hits.slice(0,3).map(a=>AXES[a].label.toLowerCase()).join(', '));
+    const shared = s.tags.filter(t=>likeTags.has(t));
+    if(shared.length) why.push('has the ' + shared.slice(0,2).map(t=>TAG_LABEL[t].replace(/^\S+\s/,'')).join(' and ') + ' you rate highest');
+    if(misses.length) why.push('but it is off on ' + misses.slice(0,2).map(a=>AXES[a].label.toLowerCase()).join(' and '));
+    const usual = profile.types.filter(t=>t.n>=2)[0];
+    const offType = usual && usual.type !== s.type;
+    return {...s, score, offType, why: why.join('; ') || 'a reasonable fit for your profile',
+            tried: tried.has(s.n.toLowerCase())};
+  }).sort((a,b)=>b.score-a.score);
+}
+
+/* The one sentence to say out loud in a wine shop */
+function cheatSheet(profile){
+  if(!profile.ready) return null;
+  const p = profile.axes, bits = [];
+  const w = (a) => p[a].status==='ok' ? axWord(a, p[a].target) : null;
+  const topType = profile.types.filter(t=>t.n>=2)[0];
+  if(p.sweet.status==='ok') bits.push(w('sweet'));
+  if(p.body.status==='ok') bits.push(w('body'));
+  if(p.tannin.status==='ok' && (topType?topType.type:'') !== 'white') bits.push(w('tannin'));
+  if(p.acid.status==='ok') bits.push(w('acid'));
+  if(p.oak.status==='ok') bits.push(w('oak'));
+  const noun = topType ? ({red:'red', white:'white', rose:'rosé', sparkling:'sparkling wine', dessert:'dessert wine'})[topType.type] : 'wine';
+  const fruit = profile.tags.likes.filter(r=>['red_fruit','dark_fruit','citrus','orchard','stone','tropical','jammy'].includes(r.tag))[0];
+  const avoidBits = profile.dealbreakers.slice(0,2).map(d=>AVOID_PHRASE[d.k]).filter(Boolean);
+  return {
+    line: 'I want a ' + noun + ' that is ' + bits.slice(0,4).join(', ')
+          + (fruit ? ', with ' + TAG_LABEL[fruit.tag].replace(/^\S+\s/,'').toLowerCase() + ' flavors' : '') + '.',
+    avoid: avoidBits.length ? 'Nothing ' + avoidBits.join(' or ') + '.' : null,
+  };
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+function useToast(){
+  const [ts,setTs] = useState([]);
+  const push = useCallback((msg,kind='success')=>{
+    const id = uid();
+    setTs(t=>[...t,{id,msg,kind}]);
+    setTimeout(()=>setTs(t=>t.filter(x=>x.id!==id)), 2600);
+  },[]);
+  const El = () => (
+    <div className="toast-wrap">
+      {ts.map(t => <div key={t.id} className={'toast '+t.kind}>{t.msg}</div>)}
+    </div>
+  );
+  return [push, El];
+}
+
+function Option({o, selected, onClick, multi}){
+  return (
+    <button className={'opt'+(selected?' sel':'')} onClick={onClick} type="button">
+      <span className="oe">{o.e}</span>
+      <span style={{flex:1,minWidth:0}}>
+        <span className="ot">{o.t}</span>
+        {o.d && <span className="od">{o.d}</span>}
+      </span>
+      {selected && <span className="chk">{multi?'☑':'●'}</span>}
+    </button>
+  );
+}
+
+function PhotoPicker({photo, onPhoto, onClear}){
+  const ref = useRef(null);
+  const [busy,setBusy] = useState(false);
+  const pick = async e => {
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    setBusy(true);
+    try { onPhoto(await shrink(f)); } catch(err){ alert('Could not read that photo.'); }
+    setBusy(false);
+    e.target.value = '';
+  };
+  if(photo) return (
+    <div className="photo-prev">
+      <img src={photo} alt="label" />
+      <button className="rm" onClick={onClear} type="button">Remove</button>
+    </div>
+  );
+  return (
+    <div>
+      <button className="photo-btn" onClick={()=>ref.current.click()} type="button" disabled={busy}>
+        <span className="pe">📷</span>
+        {busy ? 'Processing…' : 'Snap the label'}
+        <span className="tiny muted">Optional — but it makes it findable later</span>
+      </button>
+      <input ref={ref} type="file" accept="image/*" capture="environment" onChange={pick} style={{display:'none'}} />
+    </div>
+  );
+}
+
+/* ---------- The logging wizard ---------- */
+function Wizard({onClose, onSave}){
+  const [d,setD] = useState({
+    id:uid(), date:today(), type:'red', name:'', style:'', price:'', place:'',
+    a:{}, tags:[], rating:null, why_bad:null, why_good:null, note:''
+  });
+  const [photo,setPhoto] = useState(null);
+  const [step,setStep] = useState(0);
+  const bodyRef = useRef(null);
+
+  const qs = useMemo(()=>QUESTIONS.filter(q=>!q.when||q.when(d)), [d]);
+  const steps = useMemo(()=>['bottle', ...qs.map(q=>q), 'note'], [qs]);
+  const cur = steps[Math.min(step, steps.length-1)];
+  const isFirst = step===0, isLast = step>=steps.length-1;
+
+  useEffect(()=>{ if(bodyRef.current) bodyRef.current.scrollTop = 0; },[step]);
+
+  const set = patch => setD(x=>({...x,...patch}));
+  const setAxis = (axis,v) => setD(x=>({...x, a:{...x.a, [axis]:v}}));
+  const next = () => {
+    // leaving the notes question with no oak picked means: no oak
+    if(cur && cur.id==='notes' && typeof d.a.oak !== 'number') setAxis('oak',0);
+    setStep(s=>Math.min(s+1, steps.length-1));
+  };
+  const back = () => setStep(s=>Math.max(0,s-1));
+  const advance = () => setTimeout(()=>setStep(s=>s+1), 200); // render clamps to the live step list
+
+  const answered = (() => {
+    if(cur==='bottle' || cur==='note') return true;
+    if(cur.kind==='many') return true;
+    if(cur.kind==='rating') return !!d.rating;
+    if(cur.axis) return typeof d.a[cur.axis]==='number';
+    return !!d[cur.id];
+  })();
+
+  const pickOne = (q,o) => {
+    if(q.kind==='rating'){ set({rating:o.v}); }
+    else if(q.axis){ setAxis(q.axis, o.v); }
+    else { set({[q.id]:o.v}); }
+    advance();
+  };
+  const toggleTag = (q,o) => {
+    setD(x=>{
+      let tags = x.tags.slice();
+      const on = tags.includes(o.tag);
+      if(o.solo){ tags = on ? [] : tags.filter(t=>!q.opts.some(oo=>oo.tag===t)); if(!on) tags.push(o.tag); }
+      else {
+        tags = tags.filter(t=>t!=='none');
+        if(on) tags = tags.filter(t=>t!==o.tag); else tags.push(o.tag);
+      }
+      const a = {...x.a};
+      if(q.id==='notes'){ a.oak = tags.includes('oak') ? 3 : 0; }
+      return {...x, tags, a};
+    });
+  };
+
+  const commit = () => {
+    const entry = {...d, name: d.name.trim() || 'Unnamed bottle', hasPhoto: !!photo};
+    onSave(entry, photo);
+  };
+
+  const pct = Math.round((step/(steps.length-1))*100);
+
+  return (
+    <div className="wiz">
+      <div className="wiz-head">
+        <div className="wiz-head-row">
+          <button className="wiz-x" onClick={onClose} type="button">✕</button>
+          <span className="wiz-step">
+            {cur==='bottle' ? 'THE BOTTLE' : cur==='note' ? 'ALMOST DONE' : 'QUESTION '+step+' OF '+(steps.length-2)}
+          </span>
+          <span style={{width:26}} />
+        </div>
+        <div className="prog"><div className="prog-fill" style={{width:pct+'%'}} /></div>
+      </div>
+
+      <div className="wiz-body" ref={bodyRef}>
+        {cur==='bottle' && (
+          <div>
+            <div className="wiz-q">What are you drinking?</div>
+            <div className="wiz-help">Photo of the label is enough — you can leave everything else blank and still get a useful read.</div>
+            <PhotoPicker photo={photo} onPhoto={setPhoto} onClear={()=>setPhoto(null)} />
+            <div style={{height:14}} />
+            <div className="field">
+              <label>Type</label>
+              <div className="chips">
+                {TYPES.map(t => (
+                  <button key={t.id} type="button"
+                    className={'tab-pill'+(d.type===t.id?' active':'')}
+                    onClick={()=>set({type:t.id})}>{t.e} {t.t}</button>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <label>Name on the bottle</label>
+              <input value={d.name} onChange={e=>set({name:e.target.value})} placeholder="e.g. Josh Cellars Cabernet" />
+            </div>
+            <div className="field">
+              <label>Grape or style, if you know it</label>
+              <input value={d.style} onChange={e=>set({style:e.target.value})} placeholder="e.g. Cabernet Sauvignon" />
+            </div>
+            <div className="grid2">
+              <div className="field">
+                <label>Price</label>
+                <input value={d.price} onChange={e=>set({price:e.target.value})} placeholder="$14" inputMode="decimal" />
+              </div>
+              <div className="field">
+                <label>Date</label>
+                <input type="date" value={d.date} onChange={e=>set({date:e.target.value})} />
+              </div>
+            </div>
+            <div className="field">
+              <label>Where</label>
+              <input value={d.place} onChange={e=>set({place:e.target.value})} placeholder="Home, Olive Garden, Kyle's place…" />
+            </div>
+          </div>
+        )}
+
+        {cur!=='bottle' && cur!=='note' && (
+          <div>
+            <div className="wiz-q">{cur.q}</div>
+            <div className="wiz-help">{cur.help}</div>
+            {cur.opts.map((o,i) => {
+              const sel = cur.kind==='many'
+                ? d.tags.includes(o.tag)
+                : cur.kind==='rating' ? d.rating===o.v
+                : cur.axis ? d.a[cur.axis]===o.v : d[cur.id]===o.v;
+              return <Option key={i} o={o} selected={sel} multi={cur.kind==='many'}
+                        onClick={()=> cur.kind==='many' ? toggleTag(cur,o) : pickOne(cur,o)} />;
+            })}
+            {cur.kind!=='many' && (
+              <button className="btn btn-ghost" style={{marginTop:6}} type="button" onClick={next}>
+                Not sure — skip this one
+              </button>
+            )}
+          </div>
+        )}
+
+        {cur==='note' && (
+          <div>
+            <div className="wiz-q">Anything else worth remembering?</div>
+            <div className="wiz-help">What you ate with it, who recommended it, whether you'd bring it to someone's house. Totally optional.</div>
+            <div className="field">
+              <textarea value={d.note} onChange={e=>set({note:e.target.value})}
+                placeholder="Had it with steak. Better on the second glass." />
+            </div>
+            <div className="card">
+              <div className="section-title" style={{marginTop:0}}>What you said</div>
+              <Recap d={d} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="wiz-foot">
+        {!isFirst && <button className="btn btn-secondary" style={{flex:'0 0 96px'}} onClick={back} type="button">Back</button>}
+        {!isLast && <button className="btn btn-primary" onClick={next} disabled={!answered} type="button">
+          {cur==='bottle' ? 'Start tasting →' : 'Next'}
+        </button>}
+        {isLast && <button className="btn btn-primary" onClick={commit} type="button">Save this wine</button>}
+      </div>
+    </div>
+  );
+}
+
+function Recap({d}){
+  const rows = [];
+  Object.keys(AXES).forEach(a => {
+    if(typeof d.a[a]==='number')
+      rows.push([AXES[a].label, axWord(a, d.a[a])]);
+  });
+  return (
+    <div>
+      {d.rating && <div className="kv"><span className="k">Verdict</span>
+        <span className="v">{STARS[d.rating]} {['','Poured it out','Not again','Forgettable','Liked it','Loved it'][d.rating]}</span></div>}
+      {rows.map(([k,v]) => <div className="kv" key={k}><span className="k">{k}</span><span className="v">{v}</span></div>)}
+      {d.tags.length>0 && (
+        <div style={{marginTop:10}} className="chips">
+          {d.tags.map(t => <span className="chip" key={t}>{TAG_LABEL[t]||t}</span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Thumb({id, hasPhoto, type}){
+  const [src,setSrc] = useState(null);
+  useEffect(()=>{ let ok=true; if(hasPhoto) getPhoto(id).then(p=>{ if(ok) setSrc(p); }); return ()=>{ok=false;}; },[id,hasPhoto]);
+  const fallback = (TYPES.find(t=>t.id===type)||TYPES[0]).e;
+  if(src) return <img className="wthumb" src={src} alt="" />;
+  return <div className="wthumb">{fallback}</div>;
+}
+
+function CellarTab({wines, onOpen}){
+  const [filter,setFilter] = useState('all');
+  const [q,setQ] = useState('');
+  const list = wines
+    .filter(w => filter==='all' || w.type===filter)
+    .filter(w => !q || (w.name+' '+(w.style||'')+' '+(w.place||'')).toLowerCase().includes(q.toLowerCase()))
+    .slice().sort((a,b)=> (b.date||'').localeCompare(a.date||'') || b.id.localeCompare(a.id));
+  const rated = wines.filter(w=>w.rating);
+  const best = rated.slice().sort((a,b)=>b.rating-a.rating)[0];
+
+  if(!wines.length) return (
+    <div className="empty">
+      <div className="big">🍷</div>
+      <h3>No wines logged yet</h3>
+      <p>Pour a glass, hit <b>Log a wine</b>, and answer a handful of multiple-choice questions.<br/><br/>
+      Three bottles is enough for the app to start telling you what you like.</p>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="grid2" style={{marginBottom:12}}>
+        <div className="stat"><div className="l">Logged</div><div className="v">{wines.length}</div>
+          <div className="s">{rated.length} rated</div></div>
+        <div className="stat"><div className="l">Your average</div>
+          <div className="v">{rated.length ? (mean(rated.map(w=>w.rating))).toFixed(1) : '—'}</div>
+          <div className="s">out of 5</div></div>
+      </div>
+      {best && <div className="card tight" style={{display:'flex',alignItems:'center',gap:10}}>
+        <span style={{fontSize:22}}>🏆</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:11,color:'var(--muted)',fontWeight:700,letterSpacing:'.05em'}}>TOP RATED</div>
+          <div style={{fontWeight:700,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{best.name}</div>
+        </div>
+        <span style={{fontSize:20}}>{STARS[best.rating]}</span>
+      </div>}
+
+      <div className="field" style={{marginBottom:10}}>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search your bottles…" />
+      </div>
+      <div className="tab-pills">
+        <button className={'tab-pill'+(filter==='all'?' active':'')} onClick={()=>setFilter('all')}>All</button>
+        {TYPES.map(t => <button key={t.id} className={'tab-pill'+(filter===t.id?' active':'')}
+          onClick={()=>setFilter(t.id)}>{t.e} {t.t}</button>)}
+      </div>
+
+      {list.length===0 && <div className="empty"><p>Nothing matches that.</p></div>}
+      {list.map(w => (
+        <button className="wrow" key={w.id} onClick={()=>onOpen(w.id)} type="button">
+          <Thumb id={w.id} hasPhoto={w.hasPhoto} type={w.type} />
+          <div className="wrow-main">
+            <div className="wrow-name">{w.name}</div>
+            <div className="wrow-sub">
+              {[w.style, prettyDate(w.date), w.price].filter(Boolean).join(' · ')}
+            </div>
+            <div className="chips" style={{marginTop:5}}>
+              {(w.tags||[]).filter(t=>t!=='none').slice(0,3).map(t =>
+                <span className="chip" key={t} style={{fontSize:11,padding:'3px 8px'}}>{TAG_LABEL[t]||t}</span>)}
+            </div>
+          </div>
+          <div className="wrow-score">{w.rating?STARS[w.rating]:'—'}<span className="n">{w.rating?w.rating+'/5':'unrated'}</span></div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DetailView({wine, onBack, onDelete}){
+  const [src,setSrc] = useState(null);
+  useEffect(()=>{ let ok=true; if(wine.hasPhoto) getPhoto(wine.id).then(p=>{ if(ok) setSrc(p); }); return ()=>{ok=false;}; },[wine.id]);
+  return (
+    <div>
+      <button className="btn btn-ghost btn-sm" style={{marginBottom:14}} onClick={onBack} type="button">← Back</button>
+      {src && <img className="dtl-photo" src={src} alt="label" />}
+      <h2 style={{fontSize:22,fontWeight:800,lineHeight:1.2,marginBottom:4}}>{wine.name}</h2>
+      <div className="muted tiny" style={{marginBottom:14}}>
+        {[(TYPES.find(t=>t.id===wine.type)||{}).t, wine.style, prettyDate(wine.date), wine.place, wine.price].filter(Boolean).join(' · ')}
+      </div>
+      <div className="card"><Recap d={wine} /></div>
+      {wine.why_good && <div className="card tight">
+        <span className="muted tiny">What you liked: </span><b>{LIKED_LABEL[wine.why_good]||wine.why_good}</b></div>}
+      {wine.why_bad && wine.why_bad!=='none' && <div className="card tight">
+        <span className="muted tiny">What put you off: </span><b>{DEALBREAKER_LABEL[wine.why_bad]||wine.why_bad}</b></div>}
+      {wine.note && <div className="card"><div className="section-title" style={{marginTop:0}}>Notes</div>
+        <div style={{fontSize:14,lineHeight:1.5}}>{wine.note}</div></div>}
+      <button className="btn btn-danger" style={{marginTop:8}} type="button"
+        onClick={()=>{ if(confirm('Delete '+wine.name+'? This cannot be undone.')) onDelete(wine.id); }}>
+        Delete this wine
+      </button>
+    </div>
+  );
+}
+
+function Meter({axis, p}){
+  const A = AXES[axis];
+  if(p.status!=='ok') return null;
+  const lo = clamp(p.target-p.spread,0,3), hi = clamp(p.target+p.spread,0,3);
+  const conf = p.conf==='hi'?'Strong read':p.conf==='mid'?'Getting clear':'Early guess';
+  return (
+    <div className="meter">
+      <div className="meter-top">
+        <span className="meter-label">{A.label}<span className={'conf '+p.conf}>{conf}</span></span>
+        <span className="meter-val">{axWord(axis, p.target)}</span>
+      </div>
+      <div className="meter-track">
+        <div className="meter-band" style={{left:(lo/3*100)+'%', width:Math.max(6,(hi-lo)/3*100)+'%'}} />
+      </div>
+      <div className="meter-ends"><span>{A.lo}</span><span>{A.hi}</span></div>
+      <div className="meter-note">
+        Based on {p.liked} wine{p.liked===1?'':'s'} you rated 4+
+        {p.dis!==null && p.sep>=0.5 ? '. The ones you disliked sat at "'+axWord(axis, p.dis)+'" — that gap is the signal.' : '.'}
+      </div>
+    </div>
+  );
+}
+
+function PalateTab({profile, wines}){
+  const sheet = cheatSheet(profile);
+  const need = Math.max(0, 3-profile.n);
+  const noFavorites = profile.n >= 3 && !wines.some(w=>w.rating>=4);
+  if(!profile.ready) return (
+    <div>
+      <div className="banner">
+        {noFavorites ? <span>
+          <b>Nothing has scored a 4 or 5 yet</b>
+          The read is built by comparing wines you liked against wines you didn't — so it needs at least a couple of favorites. If none of these were it, that itself is useful: keep logging, and lean on your dealbreakers below when you shop.
+        </span> : <span>
+          <b>Keep going — {need>0 ? need+' more bottle'+(need===1?'':'s') : 'a couple more bottles'} to go</b>
+          A palate read needs contrast: some wines you loved and some you didn't. Rate honestly, especially the bad ones — a 2-star bottle teaches the app more than another 4.
+        </span>}
+      </div>
+      {profile.dealbreakers.length>0 && <div>
+        <div className="section-title">What you already know you dislike</div>
+        <div className="card">
+          <div className="chips">{profile.dealbreakers.map(d =>
+            <span className="chip bad" key={d.k}>{DEALBREAKER_LABEL[d.k]||d.k} ×{d.n}</span>)}</div>
+          <div className="meter-note" style={{marginTop:9}}>
+            Worth saying out loud in a shop even now: {'"'}Nothing {profile.dealbreakers.slice(0,2).map(d=>AVOID_PHRASE[d.k]).filter(Boolean).join(' or ')}.{'"'}
+          </div>
+        </div>
+      </div>}
+      {profile.dealbreakers.length===0 && <div className="empty">
+        <div className="big">👅</div>
+        <h3>{profile.n} wine{profile.n===1?'':'s'} logged</h3>
+        <p>Your preference read unlocks once there is enough to compare.</p>
+      </div>}
+    </div>
+  );
+  const order = ['sweet','tannin','acid','body','oak','booze','finish'];
+  return (
+    <div>
+      <div className="card">
+        <div className="section-title" style={{marginTop:0}}>Say this out loud in a wine shop</div>
+        <div style={{fontSize:16,lineHeight:1.5,fontWeight:600}}>{'"'}{sheet.line}{'"'}</div>
+        {sheet.avoid && <div style={{fontSize:14,color:'var(--muted)',marginTop:7}}>{'"'}{sheet.avoid}{'"'}</div>}
+        <button className="btn btn-secondary btn-sm" style={{marginTop:12,width:'100%'}} type="button"
+          onClick={()=>{ const t = sheet.line+(sheet.avoid?' '+sheet.avoid:'');
+            if(navigator.clipboard) navigator.clipboard.writeText(t).then(()=>alert('Copied.'),()=>alert(t));
+            else alert(t); }}>Copy</button>
+      </div>
+
+      <div className="section-title">Your palate, measured</div>
+      <div className="card">
+        {order.map(a => <Meter key={a} axis={a} p={profile.axes[a]} />)}
+        {order.every(a=>profile.axes[a].status!=='ok') &&
+          <div className="muted tiny">Not enough answered questions yet.</div>}
+      </div>
+
+      {(profile.tags.likes.length>0 || profile.tags.dislikes.length>0) && <div>
+        <div className="section-title">Flavors that move your rating</div>
+        <div className="card">
+          {profile.tags.likes.length>0 && <div style={{marginBottom:12}}>
+            <div className="tiny muted" style={{marginBottom:6}}>You rate these higher</div>
+            <div className="chips">{profile.tags.likes.map(r =>
+              <span className="chip good" key={r.tag}>{TAG_LABEL[r.tag]||r.tag} +{r.lift.toFixed(1)}</span>)}</div>
+          </div>}
+          {profile.tags.dislikes.length>0 && <div>
+            <div className="tiny muted" style={{marginBottom:6}}>You rate these lower</div>
+            <div className="chips">{profile.tags.dislikes.map(r =>
+              <span className="chip bad" key={r.tag}>{TAG_LABEL[r.tag]||r.tag} {r.lift.toFixed(1)}</span>)}</div>
+          </div>}
+          <div className="meter-note" style={{marginTop:10}}>
+            The number is how much that flavor shifts your rating versus your average of {profile.tags.overall.toFixed(1)}.
+          </div>
+        </div>
+      </div>}
+
+      {profile.dealbreakers.length>0 && <div>
+        <div className="section-title">Your dealbreakers</div>
+        <div className="card">
+          <div className="chips">{profile.dealbreakers.map(d =>
+            <span className="chip bad" key={d.k}>{DEALBREAKER_LABEL[d.k]||d.k} ×{d.n}</span>)}</div>
+          <div className="meter-note" style={{marginTop:9}}>These actively filter your recommendations.</div>
+        </div>
+      </div>}
+
+      {profile.loves.length>0 && <div>
+        <div className="section-title">Why you like what you like</div>
+        <div className="card">
+          <div className="chips">{profile.loves.map(d =>
+            <span className="chip gold" key={d.k}>{LIKED_LABEL[d.k]||d.k} ×{d.n}</span>)}</div>
+        </div>
+      </div>}
+
+      {profile.types.length>0 && <div>
+        <div className="section-title">By type</div>
+        <div className="card">
+          {profile.types.map(t => {
+            const T = TYPES.find(x=>x.id===t.type)||{e:'🍷',t:t.type};
+            return <div className="kv" key={t.type}>
+              <span className="k">{T.e} {T.t}</span>
+              <span className="v">{t.avg.toFixed(1)} <span className="muted tiny">({t.n})</span></span>
+            </div>;
+          })}
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+function PicksTab({profile, wines}){
+  const domType = (profile.types.filter(t=>t.n>=2)[0]||{}).type || 'all';
+  const [type,setType] = useState(domType);
+  const recs = useMemo(()=>recommend(profile, wines), [profile, wines]);
+  const noFavorites = profile.n >= 3 && !wines.some(w=>w.rating>=4);
+  if(!profile.ready) return (
+    <div className="empty">
+      <div className="big">🎯</div>
+      <h3>{noFavorites ? 'Picks need a favorite first' : 'Picks unlock at 3 rated wines'}</h3>
+      <p>{noFavorites
+        ? 'You have rated ' + profile.n + ' wines but none above a 3. Recommendations are built by aiming at wines you loved — so the app needs at least one or two of those before it can point anywhere.'
+        : 'Once the app can see a pattern, it matches your numbers against 30+ common grapes and tells you exactly what to ask for.'}</p>
+    </div>
+  );
+  const list = recs.filter(r => type==='all' || r.type===type).slice(0,10);
+  return (
+    <div>
+      <div className="banner">
+        <b>Built from {profile.n} rated bottles</b>
+        Match % is how close each style sits to your measured preferences, minus your dealbreakers. It gets sharper with every wine you log.
+      </div>
+      <div className="tab-pills">
+        <button className={'tab-pill'+(type==='all'?' active':'')} onClick={()=>setType('all')}>All</button>
+        {TYPES.map(t => <button key={t.id} className={'tab-pill'+(type===t.id?' active':'')}
+          onClick={()=>setType(t.id)}>{t.e} {t.t}</button>)}
+      </div>
+      {list.map(r => (
+        <div className="pick" key={r.n}>
+          <div className="pick-top">
+            <span className="pick-name">{r.n}</span>
+            <span className="pick-match">{r.score}%</span>
+          </div>
+          <div className="pick-why">
+            {r.why}
+            {r.tried?' · you have logged this style before':''}
+            {r.offType && type==='all' ? ' · a different style than you usually drink' : ''}
+          </div>
+          <div className="pick-say"><b>Ask for:</b> {r.say} <span className="muted">· {r.price}</span></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MoreTab({wines, onImport, onReset, push}){
+  const fileRef = useRef(null);
+  const doExport = async () => {
+    const out = [];
+    for(const w of wines){
+      const photo = w.hasPhoto ? await getPhoto(w.id) : null;
+      out.push({...w, _photo:photo});
+    }
+    const blob = new Blob([JSON.stringify({v:1, exported:new Date().toISOString(), wines:out}, null, 2)],
+      {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'palate-wines-'+today()+'.json';
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+    push('Exported '+wines.length+' wines');
+  };
+  const doImport = e => {
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const fr = new FileReader();
+    fr.onload = async () => {
+      try {
+        const data = JSON.parse(fr.result);
+        const incoming = Array.isArray(data) ? data : data.wines;
+        if(!Array.isArray(incoming)) throw new Error('bad file');
+        await onImport(incoming);
+      } catch(err){ push('That file could not be read', 'error'); }
+    };
+    fr.readAsText(f);
+    e.target.value = '';
+  };
+  return (
+    <div>
+      <div className="section-title">How this works</div>
+      <div className="card" style={{fontSize:14,lineHeight:1.6}}>
+        <p style={{marginBottom:10}}>You never have to know wine words. You answer questions about <b>textures and feelings</b> — does your mouth water, does it feel heavy, does it burn — and the app converts those into the same measurements a sommelier uses.</p>
+        <p style={{marginBottom:10}}>Your 1–5 gut rating is the anchor. The app looks for the traits that split your 4s and 5s from your 1s and 2s. That split is your palate.</p>
+        <p>Everything stays on this device. No account, no server, no internet needed after the page loads.</p>
+      </div>
+
+      <div className="section-title">Your data</div>
+      <div className="card">
+        <div className="kv"><span className="k">Wines logged</span><span className="v">{wines.length}</span></div>
+        <div className="kv"><span className="k">With photos</span><span className="v">{wines.filter(w=>w.hasPhoto).length}</span></div>
+        <div className="kv"><span className="k">Stored</span><span className="v">This device only</span></div>
+        <div style={{height:12}} />
+        <button className="btn btn-secondary" onClick={doExport} type="button">⬇ Export backup (JSON)</button>
+        <div style={{height:9}} />
+        <button className="btn btn-secondary" onClick={()=>fileRef.current.click()} type="button">⬆ Import backup</button>
+        <input ref={fileRef} type="file" accept="application/json,.json" onChange={doImport} style={{display:'none'}} />
+        <div className="meter-note" style={{marginTop:10}}>
+          Back up before clearing your browser data — that would wipe your wines.
+        </div>
+      </div>
+
+      <div className="section-title">Danger zone</div>
+      <div className="card">
+        <button className="btn btn-danger" type="button"
+          onClick={()=>{ if(confirm('Delete all '+wines.length+' wines and start over?')) onReset(); }}>
+          Erase everything
+        </button>
+      </div>
+      <div className="muted tiny" style={{textAlign:'center',padding:'18px 0'}}>Palate · a tasting notebook that does the vocabulary for you</div>
+    </div>
+  );
+}
+
+function App(){
+  const [wines,setWines] = useState(load);
+  const [tab,setTab] = useState('cellar');
+  const [wizard,setWizard] = useState(false);
+  const [openId,setOpenId] = useState(null);
+  const [push,Toasts] = useToast();
+
+  useEffect(()=>{ if(!save(wines)) push('Out of storage — export a backup and delete some photos','error'); },[wines]);
+  const profile = useMemo(()=>buildProfile(wines), [wines]);
+  const open = wines.find(w=>w.id===openId);
+
+  const onSave = async (entry, photo) => {
+    if(photo){ const ok = await putPhoto(entry.id, photo);
+      if(!ok){ entry.hasPhoto = false; push('Wine saved, but the photo would not fit','error'); } }
+    setWines(w => {
+      const i = w.findIndex(x=>x.id===entry.id);
+      if(i>=0){ const c = w.slice(); c[i] = entry; return c; }
+      return [entry, ...w];
+    });
+    setWizard(false);
+    const n = wines.length + 1;
+    if(n===3) { setTab('palate'); push('Third wine in — your palate read just unlocked 🎉'); }
+    else push('Saved. ' + (n<3 ? (3-n)+' more until your palate read.' : 'Profile updated.'));
+  };
+  const onDelete = async id => {
+    await delPhoto(id);
+    setWines(w=>w.filter(x=>x.id!==id));
+    setOpenId(null);
+    push('Deleted');
+  };
+  const onImport = async incoming => {
+    const have = new Set(wines.map(w=>w.id));
+    const add = [];
+    for(const raw of incoming){
+      const {_photo, ...w} = raw;
+      if(!w.id || have.has(w.id)) continue;
+      w.a = w.a || {}; w.tags = w.tags || [];
+      if(_photo){ const ok = await putPhoto(w.id, _photo); w.hasPhoto = !!ok; }
+      add.push(w);
+    }
+    if(!add.length){ push('Nothing new to import','error'); return; }
+    setWines(w=>[...add, ...w]);
+    push('Imported '+add.length+' wine'+(add.length===1?'':'s'));
+  };
+  const onReset = async () => {
+    for(const w of wines) if(w.hasPhoto) await delPhoto(w.id);
+    setWines([]); setOpenId(null); push('Everything erased');
+  };
+
+  const TABS = [
+    {id:'cellar', e:'🍾', t:'My Wines'},
+    {id:'palate', e:'👅', t:'My Palate'},
+    {id:'picks',  e:'🎯', t:'What to Buy'},
+    {id:'more',   e:'⚙️', t:'More'},
+  ];
+  const TITLES = {cellar:'My Wines', palate:'My Palate', picks:'What to Buy Next', more:'More'};
+  const SUBS = {
+    cellar:'Every bottle you have logged',
+    palate:'What the answers say about you',
+    picks:'Matched against your profile',
+    more:'How it works, backups, reset',
+  };
+
+  return (
+    <div className="app-wrap">
+      <Toasts />
+      <div className="topbar">
+        <div>
+          <h1>{open ? 'Wine' : TITLES[tab]}</h1>
+          <div className="sub">{open ? 'Tasting notes' : SUBS[tab]}</div>
+        </div>
+        {tab==='palate' && profile.ready &&
+          <span className="chip gold">{profile.n} bottles</span>}
+      </div>
+
+      <div className="main-scroll">
+        {open ? <DetailView wine={open} onBack={()=>setOpenId(null)} onDelete={onDelete} /> : <div>
+          {tab==='cellar' && <CellarTab wines={wines} onOpen={setOpenId} />}
+          {tab==='palate' && <PalateTab profile={profile} wines={wines} />}
+          {tab==='picks'  && <PicksTab profile={profile} wines={wines} />}
+          {tab==='more'   && <MoreTab wines={wines} onImport={onImport} onReset={onReset} push={push} />}
+        </div>}
+      </div>
+
+      {!open && <button className="fab" onClick={()=>setWizard(true)} type="button">＋ Log a wine</button>}
+
+      <div className="bnav">
+        {TABS.map(t => (
+          <button key={t.id} className={'bnav-item'+(tab===t.id&&!open?' active':'')}
+            onClick={()=>{ setOpenId(null); setTab(t.id); }} type="button">
+            <span className="ic">{t.e}</span>{t.t}
+          </button>
+        ))}
+      </div>
+
+      {wizard && <Wizard onClose={()=>{ if(confirm('Discard this tasting?')) setWizard(false); }} onSave={onSave} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -21,12 +21,48 @@ A personal budget dashboard for one user (Josh James, jotaja2@aol.com). Mobile-f
 ```
 budget-app/
 ├── index.html        ← ENTIRE APP. All React components, CSS, JS in one file (~2000+ lines)
+├── wine.html         ← SEPARATE APP: Palate wine tracker. Same single-file pattern, no Supabase
 ├── netlify.toml      ← Legacy Netlify config (app now on GitHub Pages, ignore)
 ├── .netlify/         ← Legacy Netlify state (ignore)
 └── CLAUDE.md         ← This file
 ```
 
 **To deploy:** push to `master` → GitHub Pages auto-deploys in ~60 seconds. No build step needed.
+
+---
+
+## wine.html — Palate (wine preference tracker)
+
+A second, fully independent single-file app at `jotaja2-spec.github.io/budget-app/wine.html`.
+Shares the budget app's conventions (React 18 CDN + Babel standalone, dark mobile-first UI,
+one file, no build) but **nothing else** — no Supabase, no auth, no network calls after load.
+
+**Why it exists:** identifying what you like in a wine requires vocabulary most people don't
+have. The app never asks for wine terms. It asks about textures and sensations
+("does your mouth water?", "does it feel like water or cream?") as multiple choice, and maps
+each answer to a 0–3 tasting axis behind the scenes.
+
+**Storage:** `localStorage` key `palate_wines_v1` for entries; IndexedDB database
+`palate_photos` (store `photos`, keyed by wine id) for label photos, shrunk to 760px JPEG
+before saving. Nothing leaves the device. Backup/restore is JSON export/import, photos included.
+
+**The engine (the part worth understanding):**
+- `QUESTIONS` — the question bank. Each option carries a numeric `v` for its axis, or a `tag`.
+- `AXES` — sweet, acid, tannin, body, oak, booze, finish. All 0–3, all with plain-English words.
+- `axisProfile()` — the 1–5 gut rating is ground truth. For each axis it takes the
+  rating-weighted mean of wines rated 4+, and measures the gap against wines rated 2−.
+  That gap is the signal; confidence (lo/mid/hi) comes from count, spread, and separation.
+- `recommend()` — scores 32 grape/styles in `STYLES` against the profile, weighted by
+  per-axis confidence, minus hard `DEALBREAKER_RULES` penalties. The match % ceiling is
+  capped by `profile.strength`, so a 3-bottle profile cannot show a 99% match.
+- `cheatSheet()` — renders the profile as one sentence to say out loud in a wine shop.
+
+**Gotchas:**
+- Three-option questions store `1.5` for the middle answer, so value→word uses banded
+  `axWord()`, never `Math.round` (1.5 would round up into the wrong band).
+- `when:` guards on questions must null-check the rating — `null <= 3` is `true` in JS.
+- Profile needs wines rated 4+ to work at all. The no-favorites path is handled explicitly
+  in both PalateTab and PicksTab; don't let it fall through to the generic "log more" copy.
 
 ---
 
