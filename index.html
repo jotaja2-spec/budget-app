@@ -2988,6 +2988,7 @@ function SettingsTab({data,uid,user,session,toast_,reload,onLogout,onTrans,onAdd
       </div>
 
       <button className="btn btn-secondary" onClick={onTrans} style={{marginBottom:8,width:'100%'}}>📋 View &amp; Edit Transactions</button>
+      <a href="wine.html" className="btn btn-secondary" style={{marginBottom:8,width:'100%',textDecoration:'none'}}>🍷 Wine Journal</a>
       <MFASection toast_={toast_}/>
       <div className="tab-pills">
         <button className={`tab-pill${sub==='banks'?' active':''}`} onClick={()=>setSub('banks')}>🏦 Banks</button>
