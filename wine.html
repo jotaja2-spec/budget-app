@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>Palate — Wine Journal</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#12100f;--surface:#1d1a19;--surface2:#262120;--border:#3a3130;
+  --text:#f0eae8;--muted:#9a8d8a;--accent:#c2436b;--accent2:#e0b063;
+  --red:#ff5c6b;--amber:#ffb84d;--green:#4ade80;--blue:#38bdf8;
+  --radius:14px;--radius-sm:8px;--nav-h:64px;--safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:16px;overscroll-behavior:none}
+#root{height:100%;display:flex;flex-direction:column}
+.app-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;max-width:600px;margin:0 auto;width:100%}
+.main-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 16px calc(var(--nav-h) + var(--safe-b) + 24px);-webkit-overflow-scrolling:touch}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 0}
+.topbar h1{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.topbar h1 span{color:var(--accent)}
+.topbar .who{font-size:11px;color:var(--muted)}
+/* nav */
+.bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:600px;height:calc(var(--nav-h) + var(--safe-b));background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-around;padding-top:8px;padding-bottom:var(--safe-b);z-index:100}
+.bnav-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 6px;border:none;background:none;color:var(--muted);cursor:pointer;font-size:10px;font-weight:600;flex:1}
+.bnav-item.active{color:var(--accent)}
+.bnav-item .ic{font-size:19px;line-height:1}
+.fab{position:fixed;bottom:calc(var(--nav-h) + var(--safe-b) + 16px);right:max(20px,calc(50% - 280px));height:54px;padding:0 22px;border-radius:27px;background:var(--accent);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;font-family:inherit;box-shadow:0 6px 24px rgba(194,67,107,.45);z-index:90}
+.fab:active{transform:scale(.96)}
+/* cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.section-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px}
+.empty{text-align:center;padding:40px 16px;color:var(--muted)}
+.empty .big{font-size:40px;margin-bottom:10px}
+.empty h3{color:var(--text);font-size:17px;margin-bottom:6px}
+.empty p{font-size:14px;line-height:1.5}
+/* forms */
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--muted)}
+.field input,.field select,.field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;color:var(--text);font-size:16px;font-family:inherit;outline:none}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+.field textarea{resize:vertical;min-height:64px}
+.field select option{background:var(--surface)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 20px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-size:15px;font-weight:600;font-family:inherit;width:100%}
+.btn:active{transform:scale(.99)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-ghost{background:none;color:var(--muted);border:1px solid var(--border)}
+.btn-danger{background:rgba(255,92,107,.13);color:var(--red);border:1px solid rgba(255,92,107,.3)}
+.btn-sm{padding:9px 14px;font-size:13px;width:auto}
+.btn:disabled{opacity:.4}
+/* choice buttons - the heart of the app */
+.choice{display:block;width:100%;text-align:left;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:14px 15px;margin-bottom:9px;cursor:pointer;font-family:inherit;color:var(--text);transition:border-color .12s,background .12s}
+.choice:active{transform:scale(.99)}
+.choice.on{border-color:var(--accent);background:rgba(194,67,107,.12)}
+.choice-main{font-size:15px;font-weight:650;display:flex;align-items:center;gap:9px}
+.choice-main .em{font-size:19px}
+.choice-sub{font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.45;padding-left:0}
+.choice.on .choice-sub{color:#cbb9bd}
+.chipwrap{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:var(--surface);border:1.5px solid var(--border);border-radius:22px;padding:9px 14px;font-size:13.5px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit}
+.chip.on{border-color:var(--accent);background:rgba(194,67,107,.16)}
+.chip.bad.on{border-color:var(--red);background:rgba(255,92,107,.14);color:#ffbcc2}
+/* step flow */
+.qhead{margin-bottom:16px}
+.qstep{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:7px}
+.qtitle{font-size:20px;font-weight:750;line-height:1.3;letter-spacing:-.01em}
+.qhelp{font-size:13.5px;color:var(--muted);margin-top:8px;line-height:1.5}
+.pbar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin:0 0 18px}
+.pfill{height:100%;background:var(--accent);border-radius:2px;transition:width .25s ease}
+.flowfoot{display:flex;gap:10px;margin-top:18px}
+/* wine list row */
+.wrow{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:11px;margin-bottom:10px;cursor:pointer;text-align:left;width:100%;font-family:inherit;color:var(--text)}
+.wthumb{width:52px;height:68px;border-radius:7px;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:24px;overflow:hidden}
+.wthumb img{width:100%;height:100%;object-fit:cover}
+.wmid{flex:1;min-width:0}
+.wname{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wmeta{font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.verdict{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:750;letter-spacing:.02em;white-space:nowrap}
+.v-love{background:rgba(194,67,107,.2);color:#ff8fae}
+.v-like{background:rgba(74,222,128,.16);color:var(--green)}
+.v-meh{background:rgba(154,141,138,.18);color:var(--muted)}
+.v-no{background:rgba(255,92,107,.15);color:var(--red)}
+/* dimension meter */
+.dim{margin-bottom:17px}
+.dim-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+.dim-name{font-size:13.5px;font-weight:700}
+.dim-val{font-size:12px;color:var(--accent2);font-weight:650}
+.dim-track{position:relative;height:9px;background:var(--surface2);border-radius:5px;border:1px solid var(--border)}
+.dim-range{position:absolute;top:0;bottom:0;background:rgba(194,67,107,.28);border-radius:5px}
+.dim-mark{position:absolute;top:-4px;width:4px;height:17px;background:var(--accent);border-radius:2px;box-shadow:0 0 0 2px var(--surface)}
+.dim-ends{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px}
+.dim-note{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.45}
+/* cheat sheet */
+.sheet{background:linear-gradient(160deg,#2a1520,#1d1a19);border:1px solid rgba(194,67,107,.38);border-radius:var(--radius);padding:18px;margin-bottom:12px}
+.sheet h3{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent2);margin-bottom:12px}
+.sheet .line{font-size:15.5px;line-height:1.55;font-weight:600;margin-bottom:10px}
+.sheet .say{background:rgba(0,0,0,.28);border:1px dashed rgba(224,176,99,.35);border-radius:10px;padding:12px 13px;font-size:14.5px;line-height:1.55;color:#f3e6d6;font-style:italic}
+/* rec cards */
+.rec{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:9px}
+.rec-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.rec-name{font-size:15px;font-weight:700}
+.rec-score{font-size:11px;font-weight:750;color:var(--accent2);white-space:nowrap}
+.rec-kind{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.rec-desc{font-size:13px;color:var(--muted);line-height:1.5;margin-top:7px}
+.rec-ask{font-size:12.5px;color:#d9c7ad;margin-top:7px;line-height:1.45}
+.insight{display:flex;gap:11px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:13px;margin-bottom:9px;font-size:13.5px;line-height:1.5}
+.insight .ic{font-size:18px;flex-shrink:0}
+/* modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;display:flex;align-items:flex-end;justify-content:center}
+.modal-sheet{background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:92vh;overflow-y:auto;padding:20px 20px calc(20px + var(--safe-b))}
+.modal-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 18px}
+.modal-title{font-size:18px;font-weight:750;margin-bottom:16px}
+/* toast */
+.toast-wrap{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:999;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:calc(100% - 32px);max-width:400px}
+.toast{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 15px;font-size:14px;font-weight:550;box-shadow:0 4px 24px rgba(0,0,0,.45)}
+.toast.success{border-color:rgba(74,222,128,.4);color:var(--green)}
+.toast.error{border-color:rgba(255,92,107,.4);color:var(--red)}
+/* auth */
+.auth-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}
+.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:30px 26px;width:100%;max-width:400px}
+.auth-title{font-size:23px;font-weight:800;margin-bottom:5px}
+.auth-sub{color:var(--muted);font-size:14px;margin-bottom:24px;line-height:1.5}
+.err{background:rgba(255,92,107,.12);border:1px solid rgba(255,92,107,.3);color:var(--red);border-radius:var(--radius-sm);padding:11px 13px;font-size:13.5px;margin-bottom:14px}
+.photo-drop{border:1.5px dashed var(--border);border-radius:12px;padding:20px;text-align:center;color:var(--muted);font-size:13.5px;cursor:pointer;position:relative;overflow:hidden}
+.photo-drop img{max-height:190px;border-radius:8px;display:block;margin:0 auto}
+.pills{display:flex;gap:6px;overflow-x:auto;margin-bottom:14px;scrollbar-width:none}
+.pills::-webkit-scrollbar{display:none}
+.pill{padding:7px 13px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit}
+.pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.kv{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:14px}
+.kv:last-child{border-bottom:none}
+.kv span:first-child{color:var(--muted)}
+.tagline{font-size:13px;color:var(--muted);line-height:1.5}
+.conf{font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;line-height:1.45}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const{useState,useEffect,useMemo,useCallback,useRef}=React;
+
+/* ══════════════════════════════════════════════
+   SUPABASE (same project as the budget app, so
+   the login you already use works here too)
+══════════════════════════════════════════════ */
+const SURL='https://whlfnlqzfakkbjmkpfwj.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndobGZubHF6ZmFra2JqbWtwZndqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NTM2MzYsImV4cCI6MjA5NDEyOTYzNn0.DeNchaLR4RTQsVQzC_XB1PgH86AZ9MtB5yz1HV92EhM';
+const{createClient}=window.supabase;
+const db=createClient(SURL,SKEY);
+
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+const dateLabel=s=>{if(!s)return '';const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
+const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+
+/* ══════════════════════════════════════════════
+   THE PALATE DIMENSIONS
+   Everything in this app — questions, wine styles,
+   your profile — is expressed on these 9 scales,
+   always 0-10. Plain-English labels on both ends
+   so nothing ever requires wine vocabulary.
+══════════════════════════════════════════════ */
+const DIMS=[
+  {k:'sweet',name:'Sweetness',lo:'Bone dry',hi:'Dessert sweet',w:1.35},
+  {k:'acid', name:'Tartness (the zing)',lo:'Soft, round',hi:'Mouth-watering',w:1.15},
+  {k:'tannin',name:'Grip (dry, fuzzy feel)',lo:'Silky, no grip',hi:'Strong-tea grip',w:1.35},
+  {k:'body', name:'Weight in your mouth',lo:'Light as water',hi:'Thick like cream',w:1.2},
+  {k:'oak',  name:'Vanilla & toast (oak)',lo:'None, pure fruit',hi:'Lots of vanilla',w:1.2},
+  {k:'fruit',name:'Fruit style',lo:'Tart & fresh',hi:'Ripe & jammy',w:.85},
+  {k:'booze',name:'Alcohol warmth',lo:'Barely there',hi:'Warm & boozy',w:.8},
+  {k:'funk', name:'Earthy & savory notes',lo:'Clean & fruity',hi:'Earthy, funky',w:.8},
+  {k:'bub',  name:'Bubbles',lo:'Still',hi:'Sparkling',w:.6},
+];
+const DIMMAP={};DIMS.forEach(d=>DIMMAP[d.k]=d);
+
+const TYPES=[
+  {v:'red',   label:'Red',           em:'🍷',pl:'reds'},
+  {v:'white', label:'White',         em:'🥂',pl:'whites'},
+  {v:'rose',  label:'Rosé',          em:'🌸',pl:'rosés'},
+  {v:'sparkling',label:'Sparkling',  em:'🫧',pl:'sparkling wines'},
+  {v:'orange',label:'Orange / skin-contact',em:'🟠',pl:'orange wines'},
+  {v:'dessert',label:'Dessert or Port',em:'🍯',pl:'dessert wines'},
+];
+const TYPELABEL=v=>(TYPES.find(t=>t.v===v)||{}).label||'Wine';
+const TYPEPLURAL=v=>(TYPES.find(t=>t.v===v)||{}).pl||'wines';
+
+/* ══════════════════════════════════════════════
+   THE QUESTIONS
+   Each option carries `set`: what that answer says
+   the wine actually IS, on the 0-10 scales above.
+   That's how "it dried my mouth out like strong
+   tea" becomes "tannin: 8.5" without you ever
+   having to know the word tannin.
+══════════════════════════════════════════════ */
+const QUESTIONS=[
+  {id:'sweet',kind:'one',quick:true,
+   title:'Does it taste sweet?',
+   help:'Not "fruity" — actual sugar. Think regular soda vs. sparkling water. Most wine that smells fruity is still technically dry.',
+   options:[
+     {v:'dry',    label:'Not sweet at all',        sub:'Clean finish, no sugar. Like unsweetened iced tea.',em:'🚫',set:{sweet:0.5}},
+     {v:'hint',   label:'A tiny hint of sweetness',sub:'Just a touch of roundness on the finish.',          em:'🤏',set:{sweet:2.5}},
+     {v:'some',   label:'Definitely a little sweet',sub:'You notice it. Like a lightly sweetened tea.',     em:'🍬',set:{sweet:5.2}},
+     {v:'lots',   label:'Sweet like dessert',      sub:'Syrupy, honey-ish, coats your mouth.',              em:'🍯',set:{sweet:8.5}},
+   ]},
+  {id:'acid',kind:'one',quick:true,
+   title:'After you swallow, does your mouth water?',
+   help:'Same reflex you get from lemonade or a green apple. Tart and juicy — not the same as sour-milk sour.',
+   options:[
+     {v:'lots', label:'A lot — almost puckery',    sub:'Zippy and lip-smacking, makes you want another sip.',em:'🍋',set:{acid:8.5}},
+     {v:'some', label:'Some — refreshing',         sub:'Juicy and lively but not sharp.',                    em:'💧',set:{acid:6.5}},
+     {v:'little',label:'Not much',                 sub:'Smooth and easy, doesn’t make you salivate.',   em:'😐',set:{acid:4}},
+     {v:'none', label:'None — it tastes soft or flat',sub:'Kind of heavy and sleepy in the mouth.',          em:'🪨',set:{acid:2}},
+   ]},
+  {id:'tannin',kind:'one',quick:true,only:['red','orange'],
+   title:'Does it dry your mouth out or make your tongue feel fuzzy?',
+   help:'Rub your tongue on the roof of your mouth. Does it catch, like after over-steeped black tea or biting a grape skin? That’s grip — totally different from sour.',
+   options:[
+     {v:'lots', label:'Yes — really grippy and drying',sub:'Cheeks feel scrubbed. Needs food.',      em:'🫖',set:{tannin:8.5}},
+     {v:'some', label:'Some grip',                 sub:'You notice a little pull, but it’s comfortable.',em:'🍇',set:{tannin:5.5}},
+     {v:'little',label:'Barely any',               sub:'Just a whisper of texture.',                 em:'🪶',set:{tannin:3}},
+     {v:'none', label:'None — totally smooth',     sub:'Slips down like juice.',                     em:'🧴',set:{tannin:1.5}},
+   ]},
+  {id:'body',kind:'one',quick:true,
+   title:'How heavy does it feel in your mouth?',
+   help:'Ignore flavor completely — just the weight and thickness. The classic trick: compare it to water, skim milk, whole milk, cream.',
+   options:[
+     {v:'light', label:'Light, almost like water',  sub:'Barely there. Easy to drink fast.',   em:'💦',set:{body:2}},
+     {v:'medlight',label:'Like skim milk',          sub:'A little presence, still nimble.',    em:'🥛',set:{body:4}},
+     {v:'med',   label:'Like whole milk',           sub:'Fills your mouth, feels substantial.',em:'🍶',set:{body:6.2}},
+     {v:'full',  label:'Thick, like cream',         sub:'Coats everything, big and chewy.',    em:'🧈',set:{body:8.5}},
+   ]},
+  {id:'fruits',kind:'many',max:2,
+   title:'Which fruit does the flavor remind you of?',
+   help:'Pick one or two — whatever is closest. Nobody gets this exactly right, and "can’t tell" is a real answer.',
+   options:[
+     {v:'tartred',label:'Tart red fruit',      sub:'Cranberry, sour cherry, pomegranate.',      em:'🍒',set:{fruit:3}},
+     {v:'ripered',label:'Ripe red fruit',      sub:'Strawberry, raspberry, red plum.',          em:'🍓',set:{fruit:5.5}},
+     {v:'dark',   label:'Dark jammy fruit',    sub:'Blackberry, blueberry, plum jam.',          em:'🫐',set:{fruit:8}},
+     {v:'citrus', label:'Citrus',              sub:'Lemon, lime, grapefruit.',                  em:'🍋',set:{fruit:3}},
+     {v:'apple',  label:'Green apple or pear', sub:'Crisp, orchard-y.',                         em:'🍏',set:{fruit:4}},
+     {v:'tropical',label:'Tropical or stone fruit',sub:'Pineapple, mango, peach, apricot.',     em:'🍍',set:{fruit:7}},
+     {v:'dried',  label:'Dried or cooked fruit',sub:'Raisin, fig, baked apple, prune.',         em:'🍇',set:{fruit:9}},
+     {v:'unsure', label:'Honestly can’t tell',sub:'Totally fine — this one gets easier.',  em:'🤷',set:{}},
+   ]},
+  {id:'flavors',kind:'many',
+   title:'Anything besides fruit? Pick any that fit.',
+   help:'Sniff twice, then sip. These are the notes that come from how the wine was made or where it grew — they matter a lot for what you’ll like.',
+   options:[
+     {v:'vanilla',label:'Vanilla, caramel, coconut',sub:'A sweet creamy smell even though it isn’t sweet. Comes from oak barrels.',em:'🍦',set:{oak:8}},
+     {v:'toast',  label:'Toast, smoke, campfire',   sub:'Burnt-edge, charred, bacon-y.',        em:'🔥',set:{oak:7}},
+     {v:'spice',  label:'Baking spice',             sub:'Clove, cinnamon, nutmeg.',             em:'🧁',set:{oak:6}},
+     {v:'butter', label:'Butter or cream',          sub:'Like buttered popcorn or movie butter.',em:'🧈',set:{oak:6.5}},
+     {v:'pepper', label:'Black pepper',             sub:'A peppery tickle at the back.',        em:'🌶️',set:{funk:6}},
+     {v:'earth',  label:'Dirt, mushroom, forest',   sub:'Damp earth, fallen leaves, mushroom.', em:'🍄',set:{funk:8}},
+     {v:'leather',label:'Leather, meat, barnyard',  sub:'Savory, animal, cured-meat-ish.',      em:'🥩',set:{funk:8.5}},
+     {v:'floral', label:'Flowers or perfume',       sub:'Roses, violets, potpourri.',           em:'🌹',set:{funk:3}},
+     {v:'herb',   label:'Grass, bell pepper, herbs',sub:'Green and leafy, freshly cut.',        em:'🌿',set:{funk:5}},
+     {v:'mineral',label:'Wet stone, chalk, salt',   sub:'Like rain on pavement or sea air.',    em:'🪨',set:{funk:5.5}},
+     {v:'onlyfruit',label:'Just fruit, nothing else',sub:'Straightforward and fruity.',         em:'🍇',set:{oak:1,funk:1.5}},
+   ]},
+  {id:'booze',kind:'one',
+   title:'Any warmth or burn going down?',
+   help:'A little heat in your chest or throat after you swallow. That’s the alcohol showing — higher-alcohol wines feel bigger and hit harder.',
+   options:[
+     {v:'none',label:'None at all',       sub:'Goes down cool and clean.',            em:'❄️',set:{booze:2.5}},
+     {v:'some',label:'A little warmth',   sub:'Pleasant glow, nothing harsh.',        em:'🌡️',set:{booze:5}},
+     {v:'lots',label:'Noticeable burn',   sub:'Hot finish, feels strong.',            em:'🥵',set:{booze:8}},
+   ]},
+  {id:'finish',kind:'one',
+   title:'How long does the taste stick around?',
+   help:'Swallow, then count. This is "finish" — long isn’t automatically better, it’s just a thing to notice.',
+   options:[
+     {v:'short',label:'Gone right away',        sub:'Clean exit, under a couple seconds.',em:'⚡',set:{}},
+     {v:'med',  label:'Maybe 10 seconds',       sub:'Fades out gradually.',               em:'⏳',set:{}},
+     {v:'long', label:'It hangs around a while',sub:'Still tasting it 30 seconds later.',  em:'🕰️',set:{}},
+   ]},
+];
+
+const VERDICTS=[
+  {v:'love',label:'Loved it — I’d buy this again',em:'😍',cls:'v-love',w:2.2},
+  {v:'like',label:'Liked it',                        em:'🙂',cls:'v-like',w:1.2},
+  {v:'meh', label:'It was fine / forgettable',       em:'😐',cls:'v-meh',w:.35},
+  {v:'no',  label:'Not for me',                      em:'🙅',cls:'v-no', w:0},
+];
+const VMAP={};VERDICTS.forEach(v=>VMAP[v.v]=v);
+
+/* What worked / what bugged you. Each one is a plain
+   phrase tied to a nudge: which scale it moves, and
+   which direction. `up` means "I want more of this". */
+const LIKED=[
+  {v:'l_sweet', label:'The sweetness',            dim:'sweet', up:true},
+  {v:'l_acid',  label:'How tart & refreshing',    dim:'acid',  up:true},
+  {v:'l_smooth',label:'How smooth it was',        dim:'tannin',up:false},
+  {v:'l_grip',  label:'The grippy, savory bite',  dim:'tannin',up:true},
+  {v:'l_light', label:'How light & easy it was',  dim:'body',  up:false},
+  {v:'l_rich',  label:'How rich & full it was',   dim:'body',  up:true},
+  {v:'l_fruit', label:'Big fruity flavor',        dim:'fruit', up:true},
+  {v:'l_oak',   label:'The vanilla / oaky side',  dim:'oak',   up:true},
+  {v:'l_earth', label:'The earthy, savory notes', dim:'funk',  up:true},
+  {v:'l_bub',   label:'The bubbles',              dim:'bub',   up:true},
+  {v:'l_finish',label:'The long finish',          dim:null},
+  {v:'l_easy',  label:'It was just easy to drink',dim:null},
+];
+const BUGGED=[
+  {v:'b_sweet', label:'Too sweet',                  dim:'sweet', up:false},
+  {v:'b_nosweet',label:'Not sweet enough',          dim:'sweet', up:true},
+  {v:'b_sour',  label:'Too sour / sharp',           dim:'acid',  up:false},
+  {v:'b_flat',  label:'Flat, needed more zing',     dim:'acid',  up:true},
+  {v:'b_harsh', label:'Too bitter, harsh, drying',  dim:'tannin',up:false},
+  {v:'b_heavy', label:'Too heavy',                  dim:'body',  up:false},
+  {v:'b_thin',  label:'Too thin / watery',          dim:'body',  up:true},
+  {v:'b_oak',   label:'Too much vanilla / oak',     dim:'oak',   up:false},
+  {v:'b_funk',  label:'Tasted weird or funky',      dim:'funk',  up:false},
+  {v:'b_booze', label:'Too boozy, burned',          dim:'booze', up:false},
+  {v:'b_jam',   label:'Too jammy / candied',        dim:'fruit', up:false},
+  {v:'b_boring',label:'Boring — nothing going on',  dim:null},
+];
+const CHIPMAP={};
+LIKED.forEach(c=>CHIPMAP[c.v]={...c,src:'liked'});
+BUGGED.forEach(c=>CHIPMAP[c.v]={...c,src:'bugged'});
+
+/* ══════════════════════════════════════════════
+   WINE STYLE CATALOG
+   Every style scored on the same 0-10 scales, so
+   your profile can be matched against them. `ask`
+   is literally what to say out loud in a store.
+══════════════════════════════════════════════ */
+const STYLES=[
+/* ---- light / tart reds ---- */
+{n:'Pinot Noir',k:'red',px:'$15–30',a:{sweet:1,acid:7,tannin:3,body:4,oak:3,fruit:5,booze:5,funk:5,bub:.5},
+ d:'Light red, tart cherry, silky with almost no grip. The gateway red for people who find reds harsh.',
+ ask:'"A lighter Pinot Noir — Oregon or California, not too oaky."'},
+{n:'Gamay / Beaujolais',k:'red',px:'$13–22',a:{sweet:1,acid:8,tannin:2,body:3,oak:1,fruit:6,booze:4,funk:3,bub:.5},
+ d:'Feather-light, juicy, bursting with fresh strawberry. Chill it 20 minutes and it drinks like a red for summer.',
+ ask:'"A Beaujolais-Villages or a Cru Beaujolais like Morgon."'},
+{n:'Barbera',k:'red',px:'$13–22',a:{sweet:1,acid:8,tannin:4,body:5,oak:2,fruit:6,booze:5,funk:3,bub:.5},
+ d:'Tart and food-friendly with modest grip. All the brightness of a light red with a bit more flesh.',
+ ask:'"A Barbera d’Asti or Barbera d’Alba."'},
+{n:'Frappato / Schiava',k:'red',px:'$15–25',a:{sweet:1,acid:8,tannin:1.5,body:2.5,oak:0,fruit:5,booze:3.5,funk:3,bub:.5},
+ d:'About as light as red gets — strawberry, flowers, zero bite. Practically a rosé with a suntan.',
+ ask:'"Something super light, like a Sicilian Frappato or an Alto Adige Schiava."'},
+{n:'Cabernet Franc (Loire)',k:'red',px:'$16–28',a:{sweet:1,acid:7,tannin:5,body:5,oak:2,fruit:5,booze:5,funk:6,bub:.5},
+ d:'Medium red with a green-herb, pencil-shaving streak. Savory rather than fruity.',
+ ask:'"A Chinon or Bourgueil — Loire Cabernet Franc."'},
+{n:'Valpolicella Classico',k:'red',px:'$13–20',a:{sweet:1.5,acid:7,tannin:3.5,body:4.5,oak:1.5,fruit:6,booze:5,funk:3,bub:.5},
+ d:'Cherry, easy, light grip. The crowd-pleaser Italian red that offends nobody.',
+ ask:'"A Valpolicella Classico, not the Ripasso."'},
+/* ---- medium reds ---- */
+{n:'Chianti / Sangiovese',k:'red',px:'$14–25',a:{sweet:1,acid:8,tannin:6,body:5.5,oak:3,fruit:5,booze:6,funk:5,bub:.5},
+ d:'Tart cherry, dried herbs, dusty grip. Built for tomato sauce — a little rough on its own.',
+ ask:'"A Chianti Classico."'},
+{n:'Montepulciano d’Abruzzo',k:'red',px:'$10–18',a:{sweet:1.5,acid:6,tannin:4,body:5.5,oak:2,fruit:6.5,booze:5.5,funk:3,bub:.5},
+ d:'Soft, plummy, low grip, cheap and reliable. The Tuesday-night red.',
+ ask:'"A Montepulciano d’Abruzzo."'},
+{n:'Merlot',k:'red',px:'$13–25',a:{sweet:2,acid:5,tannin:4.5,body:6,oak:4.5,fruit:7,booze:6,funk:2,bub:.5},
+ d:'Round, plush plum with soft grip and usually some vanilla. Cabernet with the edges sanded off.',
+ ask:'"A Merlot — something plush, not too oaky."'},
+{n:'Côtes du Rhône (GSM blend)',k:'red',px:'$12–20',a:{sweet:2,acid:6,tannin:5,body:6,oak:2,fruit:6.5,booze:6.5,funk:4.5,bub:.5},
+ d:'Peppery, herby, warm-fruited blend. Lots of flavor for the money, barrel barely involved.',
+ ask:'"A Côtes du Rhône."'},
+{n:'Tempranillo / Rioja Crianza',k:'red',px:'$13–25',a:{sweet:1.5,acid:6,tannin:5.5,body:6,oak:6.5,fruit:5,booze:6,funk:5,bub:.5},
+ d:'Cherry plus dill, coconut and leather from American oak. Distinctly savory-sweet aroma, dry taste.',
+ ask:'"A Rioja Crianza or Reserva."'},
+{n:'Carménère',k:'red',px:'$12–20',a:{sweet:2,acid:5,tannin:5.5,body:6.5,oak:4,fruit:7,booze:6.5,funk:5,bub:.5},
+ d:'Chilean specialty: dark fruit with a green-pepper, soy-savory twist. Medium grip.',
+ ask:'"A Chilean Carménère."'},
+{n:'Northern Rhône Syrah',k:'red',px:'$25–50',a:{sweet:1,acid:6.5,tannin:6,body:6.5,oak:3,fruit:5,booze:6,funk:7.5,bub:.5},
+ d:'Black pepper, olive, smoked meat. Savory more than fruity — a big step away from jammy.',
+ ask:'"A Crozes-Hermitage or Saint-Joseph."'},
+{n:'Nebbiolo / Barolo',k:'red',px:'$20–60',a:{sweet:1,acid:8,tannin:9,body:6,oak:4,fruit:4,booze:7,funk:7,bub:.5},
+ d:'Pale in the glass, ferocious in the mouth — tar, roses, massive grip and acid. Advanced-level.',
+ ask:'"A Langhe Nebbiolo to start, or a Barolo if you’re committing."'},
+/* ---- big reds ---- */
+{n:'Cabernet Sauvignon (Napa style)',k:'red',px:'$20–60',a:{sweet:2.5,acid:5,tannin:8,body:8,oak:7.5,fruit:7.5,booze:8,funk:3,bub:.5},
+ d:'Big, dark, cassis and vanilla, serious grip. The steakhouse default.',
+ ask:'"A Napa or Paso Robles Cabernet."'},
+{n:'Bordeaux blend (left bank)',k:'red',px:'$20–45',a:{sweet:1,acid:6,tannin:7.5,body:7,oak:5,fruit:5,booze:6.5,funk:5.5,bub:.5},
+ d:'Cabernet with restraint — gravel, cedar, firm grip, less fruit-forward than California.',
+ ask:'"A Médoc or Haut-Médoc Bordeaux."'},
+{n:'Malbec (Argentina)',k:'red',px:'$12–25',a:{sweet:2.5,acid:5,tannin:6,body:7,oak:5,fruit:8,booze:7,funk:2,bub:.5},
+ d:'Inky, plummy, velvet-smooth grip, often a cocoa-vanilla edge. Big flavor, easy to like.',
+ ask:'"A Mendoza Malbec."'},
+{n:'Zinfandel',k:'red',px:'$15–30',a:{sweet:3,acid:5,tannin:5,body:8,oak:6,fruit:9,booze:9,funk:2,bub:.5},
+ d:'Jammy blackberry, briary spice, high alcohol warmth. Tastes almost sweet even when it’s dry.',
+ ask:'"A Zinfandel from Lodi or Dry Creek."'},
+{n:'Shiraz (Australia)',k:'red',px:'$13–28',a:{sweet:2.5,acid:5,tannin:6.5,body:8,oak:6.5,fruit:8.5,booze:8,funk:4,bub:.5},
+ d:'Blueberry, mocha, sweet spice and smoke. Huge and unsubtle in the best way.',
+ ask:'"A Barossa or McLaren Vale Shiraz."'},
+{n:'Petite Sirah',k:'red',px:'$15–30',a:{sweet:2,acid:5,tannin:8.5,body:9,oak:6,fruit:8,booze:8,funk:3,bub:.5},
+ d:'Opaque, chewy, tooth-staining grip. The heavyweight class.',
+ ask:'"A Petite Sirah."'},
+{n:'Pinotage',k:'red',px:'$13–25',a:{sweet:2,acid:5.5,tannin:6,body:7,oak:5,fruit:6.5,booze:7,funk:6.5,bub:.5},
+ d:'South African oddity — smoky, tarry, sometimes coffee-ish. Divisive on purpose.',
+ ask:'"A South African Pinotage."'},
+/* ---- whites: crisp ---- */
+{n:'Pinot Grigio (Italy)',k:'white',px:'$10–18',a:{sweet:1,acid:7,tannin:0,body:3,oak:0,fruit:4,booze:4,funk:2,bub:.5},
+ d:'Light, lemony, neutral, cold and easy. The wine that gets out of your way.',
+ ask:'"A dry Italian Pinot Grigio."'},
+{n:'Sauvignon Blanc (New Zealand)',k:'white',px:'$12–22',a:{sweet:1.5,acid:8.5,tannin:0,body:3.5,oak:0,fruit:5.5,booze:5,funk:4.5,bub:.5},
+ d:'Explosively aromatic — grapefruit, passionfruit, fresh-cut grass. Very tart, zero oak.',
+ ask:'"A Marlborough Sauvignon Blanc."'},
+{n:'Sancerre (French Sauv Blanc)',k:'white',px:'$22–38',a:{sweet:1,acid:8.5,tannin:0,body:3.5,oak:.5,fruit:4,booze:4.5,funk:5.5,bub:.5},
+ d:'Same grape as above but stony and restrained instead of tropical. Grown-up and mineral.',
+ ask:'"A Sancerre or Pouilly-Fumé."'},
+{n:'Albariño',k:'white',px:'$14–24',a:{sweet:1,acid:8,tannin:0,body:4,oak:0,fruit:5,booze:4.5,funk:4,bub:1},
+ d:'Coastal Spanish white — citrus, peach skin, a saline snap. Made for shellfish.',
+ ask:'"An Albariño from Rías Baixas."'},
+{n:'Vinho Verde',k:'white',px:'$7–13',a:{sweet:2,acid:8,tannin:0,body:2.5,oak:0,fruit:5,booze:1.5,funk:3,bub:2.5},
+ d:'Barely-alcoholic, faintly fizzy, lime-and-green-apple. Cheapest fun in the store.',
+ ask:'"A Vinho Verde."'},
+{n:'Grüner Veltliner',k:'white',px:'$14–25',a:{sweet:1,acid:8,tannin:0,body:4,oak:0,fruit:4,booze:4.5,funk:5,bub:.5},
+ d:'Austrian, peppery-lime with a celery-herb edge. Tart and savory rather than fruity.',
+ ask:'"A Grüner Veltliner, liter bottle if they have one."'},
+{n:'Dry Riesling (German Trocken)',k:'white',px:'$15–28',a:{sweet:1.5,acid:9,tannin:0,body:3,oak:0,fruit:5,booze:3.5,funk:4,bub:.5},
+ d:'Laser-tart lime and slate, bone dry, low alcohol. The highest-acid white there is.',
+ ask:'"A German Riesling marked Trocken — that means dry."'},
+{n:'Chablis (unoaked Chardonnay)',k:'white',px:'$20–35',a:{sweet:1,acid:7.5,tannin:0,body:4.5,oak:.5,fruit:4,booze:5,funk:5.5,bub:.5},
+ d:'Chardonnay with the butter and vanilla removed — green apple, oyster shell, tense and clean.',
+ ask:'"A Chablis, or an unoaked Chardonnay."'},
+{n:'Dry Chenin Blanc',k:'white',px:'$13–25',a:{sweet:2,acid:8,tannin:0,body:4.5,oak:1,fruit:5.5,booze:5,funk:5,bub:.5},
+ d:'Quince, chamomile, honeyed aroma but a dry, tart finish. Loire or South Africa.',
+ ask:'"A dry Vouvray, or a South African Chenin Blanc."'},
+/* ---- whites: richer / sweeter ---- */
+{n:'Oaked Chardonnay (California)',k:'white',px:'$14–30',a:{sweet:2.5,acid:4,tannin:0,body:7.5,oak:9,fruit:6.5,booze:6.5,funk:2,bub:.5},
+ d:'Butter, vanilla, toasted pastry, tropical fruit. Rich and low-acid — the anti-Pinot-Grigio.',
+ ask:'"A buttery, oaked California Chardonnay."'},
+{n:'White Burgundy',k:'white',px:'$25–50',a:{sweet:1,acid:6.5,tannin:0,body:6,oak:5,fruit:4.5,booze:5.5,funk:5.5,bub:.5},
+ d:'Chardonnay in balance — a little oak, real acidity, hazelnut and lemon curd.',
+ ask:'"A white Burgundy — Mâcon or Saint-Véran for value."'},
+{n:'Viognier',k:'white',px:'$14–26',a:{sweet:3,acid:4,tannin:0,body:6.5,oak:3,fruit:7.5,booze:7,funk:2.5,bub:.5},
+ d:'Smells like apricot and honeysuckle perfume, tastes dry and full. Low acid, big body.',
+ ask:'"A Viognier."'},
+{n:'Gewürztraminer',k:'white',px:'$14–24',a:{sweet:4,acid:4,tannin:0,body:6,oak:0,fruit:7,booze:6,funk:3.5,bub:.5},
+ d:'Lychee, rose petal, ginger. Unmistakable and faintly sweet — great with spicy food.',
+ ask:'"An Alsace Gewürztraminer."'},
+{n:'Off-dry Riesling (Kabinett)',k:'white',px:'$15–28',a:{sweet:5,acid:9,tannin:0,body:3.5,oak:0,fruit:6,booze:2.5,funk:3.5,bub:.5},
+ d:'Sweet and tart at the same time, so it never feels heavy. Peach, lime, honey, very low alcohol.',
+ ask:'"A German Kabinett Riesling — a little sweet but bright."'},
+{n:'Moscato d’Asti',k:'white',px:'$10–18',a:{sweet:8,acid:6,tannin:0,body:3,oak:0,fruit:7.5,booze:1,funk:2,bub:6},
+ d:'Lightly fizzy, peachy, openly sweet, almost no alcohol. Dessert in a glass.',
+ ask:'"A Moscato d’Asti."'},
+/* ---- rosé / orange ---- */
+{n:'Provence Rosé',k:'rose',px:'$14–25',a:{sweet:1.5,acid:7,tannin:1,body:3.5,oak:0,fruit:5,booze:4.5,funk:2.5,bub:.5},
+ d:'Pale, dry, strawberry-and-citrus, crisp. Red-wine fruit with white-wine refreshment.',
+ ask:'"A dry Provence rosé."'},
+{n:'Spanish Rosado',k:'rose',px:'$10–18',a:{sweet:1.5,acid:7,tannin:2,body:4.5,oak:0,fruit:6.5,booze:5.5,funk:3,bub:.5},
+ d:'Deeper, fruitier, more substantial rosé — closer to a chilled light red.',
+ ask:'"A Navarra or Rioja rosado."'},
+{n:'White Zinfandel',k:'rose',px:'$6–12',a:{sweet:6,acid:5,tannin:1,body:3,oak:0,fruit:7,booze:3,funk:1.5,bub:.5},
+ d:'Openly sweet pink wine. Unfashionable, but if sweet is what you like, it delivers honestly.',
+ ask:'"A White Zinfandel."'},
+{n:'Orange / skin-contact wine',k:'orange',px:'$18–35',a:{sweet:1,acid:7,tannin:5,body:5.5,oak:2,fruit:4,booze:5.5,funk:8.5,bub:.5},
+ d:'White grapes treated like reds: apricot, tea, nuts, real grip and a cidery funk. Weird on purpose.',
+ ask:'"A skin-contact or orange wine — a mellow one to start."'},
+/* ---- sparkling ---- */
+{n:'Prosecco',k:'sparkling',px:'$12–20',a:{sweet:3,acid:7,tannin:0,body:3,oak:0,fruit:6.5,booze:3.5,funk:1.5,bub:8},
+ d:'Soft bubbles, pear and white flowers, a touch of sweetness even when labeled dry.',
+ ask:'"A Prosecco — Brut if you want it drier, Extra Dry is a bit sweeter."'},
+{n:'Champagne (Brut)',k:'sparkling',px:'$40–70',a:{sweet:2,acid:8.5,tannin:0,body:4.5,oak:2,fruit:4,booze:5,funk:6,bub:9},
+ d:'Fine, aggressive bubbles with a bready, toasted-nut depth. Tart and serious.',
+ ask:'"A Brut Champagne, or a Crémant if you want the same style for half the price."'},
+{n:'Cava / Crémant',k:'sparkling',px:'$13–22',a:{sweet:2,acid:8,tannin:0,body:4,oak:1,fruit:4.5,booze:4.5,funk:4.5,bub:8.5},
+ d:'Champagne’s method at a Prosecco price — drier and toastier than Prosecco.',
+ ask:'"A Brut Cava, or a Crémant de Loire."'},
+{n:'Dry Lambrusco',k:'sparkling',px:'$13–22',a:{sweet:3,acid:7,tannin:3,body:4.5,oak:0,fruit:6.5,booze:3.5,funk:3.5,bub:7},
+ d:'Fizzy red — blackberry, chalky, faintly savory. Sounds wrong, works with pizza.',
+ ask:'"A dry Lambrusco — Secco, not Dolce."'},
+/* ---- dessert ---- */
+{n:'Sauternes / late-harvest',k:'dessert',px:'$25–60',a:{sweet:9,acid:7,tannin:0,body:8,oak:4,fruit:8.5,booze:5.5,funk:4,bub:.5},
+ d:'Honey, apricot, marmalade — hugely sweet but held up by big acidity.',
+ ask:'"A Sauternes, or a late-harvest dessert white."'},
+{n:'Tawny Port',k:'dessert',px:'$20–40',a:{sweet:8.5,acid:5,tannin:4,body:8,oak:5,fruit:9,booze:9.5,funk:4.5,bub:.5},
+ d:'Caramel, walnut, dried fig, fortified and warm. Sip it small and cold.',
+ ask:'"A 10-year Tawny Port."'},
+];
+
+/* ══════════════════════════════════════════════
+   THE ENGINE
+   1. wineAttrs   — your plain-English answers about
+      one wine  ->  that wine's 9 numbers.
+   2. buildProfile — all your wines + how much you
+      liked them  ->  your preferred value on each
+      scale, how wide your range is, how sure we are.
+   3. scoreStyle  — your profile vs. a wine style
+      -> a match %, and the reason.
+══════════════════════════════════════════════ */
+function wineAttrs(t){
+  const a={},soft=[];
+  const A=t.answers||{};
+  if(t.wine_type==='white'||t.wine_type==='sparkling'||t.wine_type==='dessert'){a.tannin=1;soft.push('tannin');}
+  if(t.wine_type==='rose'){a.tannin=1.5;soft.push('tannin');}
+  if(t.wine_type==='sparkling'){a.bub=8.5;}else{a.bub=0.5;soft.push('bub');}
+  QUESTIONS.forEach(q=>{
+    const val=A[q.id];
+    if(val==null)return;
+    if(q.kind==='one'){
+      const o=q.options.find(x=>x.v===val);
+      if(!o)return;
+      Object.entries(o.set||{}).forEach(([k,v])=>{a[k]=v;const i=soft.indexOf(k);if(i>=0)soft.splice(i,1);});
+    }else{
+      const arr=Array.isArray(val)?val:[];
+      const sel=q.options.filter(o=>arr.includes(o.v));
+      if(!sel.length)return;
+      if(q.id==='fruits'){
+        const v=sel.filter(o=>o.set.fruit!=null).map(o=>o.set.fruit);
+        if(v.length)a.fruit=avg(v);
+      }else if(q.id==='flavors'){
+        const oaks=sel.filter(o=>o.set.oak!=null).map(o=>o.set.oak);
+        const funks=sel.filter(o=>o.set.funk!=null).map(o=>o.set.funk);
+        a.oak=oaks.length?Math.max(...oaks):2;
+        a.funk=funks.length?Math.max(...funks):2.5;
+      }
+    }
+  });
+  return{a,soft};
+}
+
+function buildProfile(tastings){
+  const recs=tastings.map(t=>{
+    const{a,soft}=wineAttrs(t);
+    return{t,a,soft,w:(VMAP[t.verdict]||{w:.35}).w};
+  });
+  const dims={};
+  DIMS.forEach(d=>{
+    const k=d.k;
+    const obs=[],negs=[];
+    recs.forEach(r=>{
+      const v=r.a[k];
+      if(v==null)return;
+      const softOnly=r.soft.includes(k);
+      const sw=softOnly?.45:1;
+      if(r.w>0)obs.push({v,w:r.w*sw,softOnly});else negs.push(v);
+    });
+    /* a dim only guessed from the wine's colour (whites have no grip,
+       still wine has no bubbles) is "soft" — never enough on its own */
+    const hard=obs.some(o=>!o.softOnly);
+    const wsum=obs.reduce((s,o)=>s+o.w,0);
+    let conf=clamp(Math.min(wsum/6,obs.length/5),0,1);
+    if(!hard)conf*=.35;
+    let target=null,spread=1.6;
+    if(obs.length){
+      target=obs.reduce((s,o)=>s+o.v*o.w,0)/wsum;
+      const sd=Math.sqrt(obs.reduce((s,o)=>s+o.w*Math.pow(o.v-target,2),0)/wsum);
+      spread=clamp(sd,1+(1-conf)*1.5,3.4);
+    }
+    /* the "what worked / what bugged you" taps become hard
+       bounds, anchored to the wine you said it about */
+    let floor=null,cap=null;
+    recs.forEach(r=>{
+      const v=r.a[k];
+      if(v==null)return;
+      [...(r.t.liked||[]),...(r.t.bugged||[])].forEach(cv=>{
+        const c=CHIPMAP[cv];
+        if(!c||c.dim!==k)return;
+        /* "I liked how smooth it was" endorses roughly the level that wine
+           was at — it doesn't demand an even more extreme one. "Too harsh"
+           rejects that level and has to move off it. */
+        if(c.src==='liked'){
+          if(c.up)floor=Math.max(floor==null?-99:floor,clamp(v-1,0,10));
+          else cap=Math.min(cap==null?99:cap,clamp(v+1,0,10));
+        }else{
+          if(c.up)floor=Math.max(floor==null?-99:floor,clamp(v+2,0,10));
+          else cap=Math.min(cap==null?99:cap,clamp(v-2,0,10));
+        }
+      });
+    });
+    if(floor!=null&&cap!=null&&floor>cap){const m=(floor+cap)/2;floor=m;cap=m;}
+    let bounded=false;
+    if(target==null&&(floor!=null||cap!=null)){
+      target=floor!=null&&cap!=null?(floor+cap)/2:(floor!=null?clamp(floor+1,0,10):clamp(cap-1,0,10));
+      bounded=true;
+    }else if(target!=null){
+      const t2=clamp(target,floor==null?0:floor,cap==null?10:cap);
+      bounded=Math.abs(t2-target)>.15;
+      target=t2;
+    }
+    if(floor!=null||cap!=null)conf=clamp(conf+.24,0,1);
+    dims[k]={target,spread,conf,n:obs.length,bounded,
+             likedAvg:obs.length?target:null,dislikedAvg:negs.length?avg(negs):null};
+  });
+  const rated=tastings.filter(t=>t.verdict&&t.verdict!=='meh').length;
+  const positive=tastings.filter(t=>t.verdict==='love'||t.verdict==='like').length;
+  return{dims,count:tastings.length,rated,positive,
+         ready:positive>=2&&tastings.length>=3,
+         overall:clamp(positive/5,0,1)};
+}
+
+const MORE={sweet:'sweeter than your zone',acid:'more tart than your zone',tannin:'much more grip than you go for',
+  body:'heavier than you go for',oak:'more vanilla and oak than you go for',fruit:'jammier than your zone',
+  booze:'boozier than your zone',funk:'earthier and funkier than your zone',bub:'sparkling, which you haven’t warmed to'};
+const LESS={sweet:'drier than your zone',acid:'softer and less zingy than your zone',tannin:'less grip than you go for',
+  body:'lighter than you go for',oak:'less oak than you go for',fruit:'less ripe and fruity than your zone',
+  booze:'lighter in alcohol than your zone',funk:'cleaner and fruitier than your zone',bub:'still, and you like bubbles'};
+const FITS={sweet:'sweetness',acid:'tartness',tannin:'grip',body:'weight',oak:'oak level',
+  fruit:'fruit style',booze:'alcohol',funk:'earthiness',bub:'bubbles'};
+
+function scoreStyle(s,prof){
+  let num=0,den=0;
+  const parts=[];
+  DIMS.forEach(d=>{
+    const p=prof.dims[d.k];
+    if(!p||p.target==null||p.conf<.18)return;
+    const w=d.w*p.conf;
+    const raw=s.a[d.k]-p.target;
+    let eff=Math.max(0,Math.abs(raw)-p.spread*.55); /* inside your range costs nothing */
+    /* you want none of it and this has even less (or you want tons and this
+       has more) — that isn't a strike against it */
+    const harmless=(p.target<=2.5&&raw<0)||(p.target>=7.5&&raw>0);
+    if(harmless)eff*=.35;
+    num+=w*eff*eff;den+=w;
+    parts.push({k:d.k,eff,w,harmless,dir:raw>0?'more':'less'});
+  });
+  if(!den)return null;
+  const dist=Math.sqrt(num/den);
+  const match=clamp(Math.round(100-dist*13),3,99);
+  parts.sort((a,b)=>b.eff*b.w-a.eff*a.w);
+  const bad=parts.filter(p=>p.eff>1.4&&!p.harmless).slice(0,2);
+  const good=parts.filter(p=>p.eff<.35).sort((a,b)=>b.w-a.w).slice(0,2);
+  let why='';
+  if(bad.length)why='But: '+bad.map(p=>p.dir==='more'?MORE[p.k]:LESS[p.k]).join(', and ')+'.';
+  else if(good.length)why='Nails your '+good.map(p=>FITS[p.k]).join(' and ')+'.';
+  return{match,why,bad,good};
+}
+
+function recommend(prof,kindFilter){
+  const scored=STYLES.map(s=>({s,...(scoreStyle(s,prof)||{match:null})}))
+    .filter(x=>x.match!=null);
+  const pool=kindFilter&&kindFilter!=='all'?scored.filter(x=>x.s.k===kindFilter):scored;
+  const sorted=[...pool].sort((a,b)=>b.match-a.match);
+  const best=sorted.slice(0,6);
+  const names=new Set(best.map(x=>x.s.n));
+  const worst=pool.length>=9
+    ?[...pool].sort((a,b)=>a.match-b.match).filter(x=>!names.has(x.s.n)).slice(0,3)
+    :[];
+  return{best,worst};
+}
+
+/* the store cheat sheet, in words you can say out loud */
+function describe(prof,tastings){
+  const g=k=>prof.dims[k]||{};
+  const words=[];
+  const sw=g('sweet'),ac=g('acid'),bd=g('body'),tn=g('tannin'),ok=g('oak');
+  if(sw.target!=null&&sw.conf>.2)words.push(sw.target<2?'bone dry':sw.target<3.6?'dry':sw.target<6?'just a touch sweet':'sweet');
+  if(ac.target!=null&&ac.conf>.2)words.push(ac.target>6.8?'bright and mouth-watering':ac.target>4.6?'medium-tart':'soft and low-acid');
+  if(bd.target!=null&&bd.conf>.2)words.push(bd.target<4?'light-bodied':bd.target<6.4?'medium-bodied':'full-bodied');
+  const hasGrippy=tastings.some(t=>t.wine_type==='red'||t.wine_type==='orange');
+  const tails=[];
+  if(hasGrippy&&tn.target!=null&&tn.conf>.2)tails.push(tn.target<3.5?'almost no grip':tn.target<6.2?'moderate grip':'plenty of grip');
+  if(ok.target!=null&&ok.conf>.2)tails.push(ok.target<3?'no oak or vanilla':ok.target<6?'a light touch of oak':'plenty of oak and vanilla');
+  const kinds={};
+  tastings.forEach(t=>{
+    if(!t.wine_type)return;
+    kinds[t.wine_type]=kinds[t.wine_type]||{n:0,good:0};
+    kinds[t.wine_type].n++;
+    if(t.verdict==='love'||t.verdict==='like')kinds[t.wine_type].good++;
+  });
+  const favKinds=Object.entries(kinds).filter(([,v])=>v.good>=1&&v.good/v.n>=.5)
+    .sort((a,b)=>b[1].good-a[1].good).map(([k])=>TYPEPLURAL(k));
+  const prices=tastings.filter(t=>(t.verdict==='love'||t.verdict==='like')&&t.price>0).map(t=>Number(t.price));
+  const priceLine=prices.length>=2?`$${Math.round(Math.min(...prices))}–${Math.round(Math.max(...prices))}`:(prices.length?`around $${Math.round(prices[0])}`:null);
+  const noun=favKinds.length?favKinds.slice(0,2).join(' and '):'wine';
+  const headline=(words.join(', ')||'balanced')+' '+noun+(tails.length?' with '+tails.join(' and '):'');
+  const say=`Hi — I tend to like ${words.join(', ')||'balanced'} ${noun}`+
+    (tails.length?` with ${tails.join(' and ')}`:'')+
+    `. ${priceLine?`Somewhere around ${priceLine}. `:''}What would you recommend?`;
+  return{headline,say,priceLine,favKinds};
+}
+
+const TIPS={
+  b_oak:'Look for the word "unoaked" or "stainless steel" on the back label, and steer away from California Chardonnay and Rioja Reserva.',
+  b_harsh:'Grip comes from grape skins. Ask for "low-tannin" reds — Pinot Noir, Gamay, Frappato — or drink bigger reds with fatty food, which softens the bite.',
+  b_heavy:'Check the alcohol percentage on the label. Under 13% is almost always a lighter wine.',
+  b_booze:'Same trick: alcohol percentage. Aim for 12.5% or below.',
+  b_sour:'You want lower-acid wines — warm-climate reds and whites like Viognier, Merlot, Grenache.',
+  b_sweet:'Look for "Brut," "Secco," or "Trocken" — all mean dry.',
+  b_funk:'Stick with New World labels (California, Chile, Argentina, Australia). Old World wines lean earthy.',
+  b_thin:'Higher alcohol usually means more body. 14%+ reds feel fuller.',
+  b_jam:'Look to Europe rather than California or Australia — same grapes, tarter fruit.',
+  b_nosweet:'"Off-dry," "Kabinett," "Extra Dry" Prosecco, and Moscato all carry a bit of sugar without being dessert wine.',
+  b_flat:'Ask for "high-acid" or "crisp" — or just look for cool places: Germany, Loire, northern Italy.',
+};
+
+function buildInsights(tastings,prof){
+  const out=[];
+  const liked=tastings.filter(t=>t.verdict==='love'||t.verdict==='like');
+  const disliked=tastings.filter(t=>t.verdict==='no');
+  /* 1. the scale that separates your hits from your misses */
+  if(liked.length&&disliked.length){
+    const gaps=DIMS.map(d=>{
+      const L=liked.map(t=>wineAttrs(t).a[d.k]).filter(v=>v!=null);
+      const D=disliked.map(t=>wineAttrs(t).a[d.k]).filter(v=>v!=null);
+      if(!L.length||!D.length)return null;
+      return{d,l:avg(L),dd:avg(D),gap:Math.abs(avg(L)-avg(D))};
+    }).filter(Boolean).sort((a,b)=>b.gap-a.gap);
+    if(gaps.length&&gaps[0].gap>1.4){
+      const g=gaps[0];
+      out.push({ic:'🎯',text:`Your clearest pattern is ${FITS[g.d.k]}. The wines you liked average ${g.l.toFixed(1)}/10 there; the ones you didn’t averaged ${g.dd.toFixed(1)}/10.`});
+    }
+  }
+  /* 2. complaints you keep repeating */
+  const bugCount={};
+  tastings.forEach(t=>(t.bugged||[]).forEach(b=>{bugCount[b]=(bugCount[b]||0)+1;}));
+  const topBug=Object.entries(bugCount).sort((a,b)=>b[1]-a[1])[0];
+  if(topBug&&topBug[1]>=2&&CHIPMAP[topBug[0]]){
+    out.push({ic:'🔁',text:`You’ve flagged "${CHIPMAP[topBug[0]].label}" on ${topBug[1]} wines. ${TIPS[topBug[0]]||''}`});
+  }
+  /* 3. price */
+  const lovedP=tastings.filter(t=>t.verdict==='love'&&t.price>0).map(t=>Number(t.price));
+  const allP=tastings.filter(t=>t.price>0).map(t=>Number(t.price));
+  if(lovedP.length>=2&&allP.length>=3){
+    const lm=avg(lovedP),am=avg(allP);
+    if(lm<am-2)out.push({ic:'💸',text:`The wines you loved average $${lm.toFixed(0)} — below your $${am.toFixed(0)} average. Spending more isn’t buying you more enjoyment.`});
+    else if(lm>am+5)out.push({ic:'💸',text:`Your favorites average $${lm.toFixed(0)} vs. $${am.toFixed(0)} overall. Price is tracking with what you like here.`});
+  }
+  /* 4. hit rate by type */
+  const kinds={};
+  tastings.forEach(t=>{
+    if(!t.wine_type||!t.verdict)return;
+    kinds[t.wine_type]=kinds[t.wine_type]||{n:0,good:0};
+    kinds[t.wine_type].n++;
+    if(t.verdict==='love'||t.verdict==='like')kinds[t.wine_type].good++;
+  });
+  const ks=Object.entries(kinds).filter(([,v])=>v.n>=2).sort((a,b)=>(b[1].good/b[1].n)-(a[1].good/a[1].n));
+  if(ks.length>=2&&ks[0][1].good/ks[0][1].n-ks[ks.length-1][1].good/ks[ks.length-1][1].n>=.4){
+    const hi=ks[0],lo=ks[ks.length-1];
+    out.push({ic:'📊',text:`${hi[1].good} of your ${hi[1].n} ${TYPEPLURAL(hi[0])} landed, but only ${lo[1].good} of ${lo[1].n} ${TYPEPLURAL(lo[0])}. Worth leaning into the first.`});
+  }
+  /* 5. things you keep enjoying */
+  const likeCount={};
+  tastings.forEach(t=>(t.liked||[]).forEach(b=>{likeCount[b]=(likeCount[b]||0)+1;}));
+  const topLike=Object.entries(likeCount).sort((a,b)=>b[1]-a[1])[0];
+  if(topLike&&topLike[1]>=2&&CHIPMAP[topLike[0]]){
+    out.push({ic:'💚',text:`"${CHIPMAP[topLike[0]].label}" has come up on ${topLike[1]} of your wines. That’s a real preference, not a coincidence — use it as a filter.`});
+  }
+  return out;
+}
+
+
+/* Turn the numbers back into real wine vocabulary, so you
+   pick up the words by seeing them attached to something
+   you actually tasted. */
+function translate(a,type){
+  const p=[];
+  if(a.sweet!=null)p.push(a.sweet<2?'bone-dry':a.sweet<3.6?'dry':a.sweet<6?'off-dry (a little sweet)':'sweet');
+  if(a.acid!=null)p.push(a.acid>6.8?'high-acid (tart, mouth-watering)':a.acid>4.6?'medium-acid':'low-acid (soft)');
+  if(a.body!=null)p.push(a.body<4?'light-bodied':a.body<6.4?'medium-bodied':'full-bodied');
+  const tail=[];
+  if((type==='red'||type==='orange')&&a.tannin!=null)
+    tail.push(a.tannin<3.5?'low tannin (smooth)':a.tannin<6.2?'medium tannin':'high tannin (grippy)');
+  if(a.oak!=null)
+    tail.push(a.oak<3?'no oak':a.oak<6?'a light touch of oak':'heavy oak');
+  if(a.fruit!=null)
+    tail.push(a.fruit<4?'tart fruit':a.fruit<6.5?'ripe fruit':'jammy fruit');
+  let s='That was a '+(p.length?p.join(', ')+' ':'')+TYPELABEL(type).toLowerCase();
+  if(tail.length)s+=' with '+tail.join(', ');
+  return s+'.';
+}
+
+/* ══════════════════════════════════════════════
+   DATA LAYER
+══════════════════════════════════════════════ */
+const D={
+  async list(uid){
+    const{data,error}=await db.from('wine_tastings').select('*')
+      .eq('user_id',uid).order('tasted_on',{ascending:false}).order('created_at',{ascending:false});
+    if(error)throw error;
+    return data||[];
+  },
+  async add(row){
+    const{data,error}=await db.from('wine_tastings').insert(row).select().single();
+    if(error)throw error;
+    return data;
+  },
+  async update(id,patch){
+    const{error}=await db.from('wine_tastings').update(patch).eq('id',id);
+    if(error)throw error;
+  },
+  async del(id){
+    const{error}=await db.from('wine_tastings').delete().eq('id',id);
+    if(error)throw error;
+  },
+};
+
+function resizePhoto(file,max=900,q=.72){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        const sc=Math.min(1,max/Math.max(img.width,img.height));
+        const c=document.createElement('canvas');
+        c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        res(c.toDataURL('image/jpeg',q));
+      };
+      img.onerror=()=>rej(new Error('Could not read that image'));
+      img.src=r.result;
+    };
+    r.onerror=()=>rej(new Error('Could not read that file'));
+    r.readAsDataURL(file);
+  });
+}
+
+function useToast(){
+  const[toasts,setToasts]=useState([]);
+  const toast=useCallback((msg,type='success')=>{
+    const id=Date.now()+Math.random();
+    setToasts(t=>[...t,{id,msg,type}]);
+    setTimeout(()=>setToasts(t=>t.filter(x=>x.id!==id)),3200);
+  },[]);
+  const ToastContainer=()=>(
+    <div className="toast-wrap">
+      {toasts.map(t=><div key={t.id} className={`toast ${t.type}`}>{t.msg}</div>)}
+    </div>
+  );
+  return{toast,ToastContainer};
+}
+
+/* ══════════════════════════════════════════════
+   AUTH — same Supabase login as the budget app
+══════════════════════════════════════════════ */
+function AuthScreen(){
+  const[mode,setMode]=useState('login');
+  const[email,setEmail]=useState('');
+  const[pass,setPass]=useState('');
+  const[busy,setBusy]=useState(false);
+  const[err,setErr]=useState('');
+  const[mfa,setMfa]=useState(null);
+  const[code,setCode]=useState('');
+
+  async function submit(e){
+    e.preventDefault();setBusy(true);setErr('');
+    try{
+      if(mode==='login'){
+        const{error}=await db.auth.signInWithPassword({email,password:pass});
+        if(error)throw error;
+        const{data:aal}=await db.auth.mfa.getAuthenticatorAssuranceLevel();
+        if(aal?.currentLevel==='aal1'&&aal?.nextLevel==='aal2'){
+          const factors=await db.auth.mfa.listFactors();
+          const totp=factors.data?.totp?.[0];
+          if(totp){
+            const{data:ch,error:ce}=await db.auth.mfa.challenge({factorId:totp.id});
+            if(ce)throw ce;
+            setMfa({factorId:totp.id,challengeId:ch.id});setBusy(false);return;
+          }
+        }
+      }else{
+        const{data,error}=await db.auth.signUp({email,password:pass});
+        if(error)throw error;
+        if(data.user&&!data.user.email_confirmed_at){
+          setErr('Check your email to confirm, then log in.');setBusy(false);return;
+        }
+      }
+    }catch(e){setErr(e.message||'Something went wrong');setBusy(false);}
+  }
+  async function verify(e){
+    e.preventDefault();setBusy(true);setErr('');
+    try{
+      const{error}=await db.auth.mfa.verify({factorId:mfa.factorId,challengeId:mfa.challengeId,code});
+      if(error)throw error;
+    }catch(e){setErr(e.message||'Bad code');setBusy(false);}
+  }
+
+  if(mfa)return(
+    <div className="auth-wrap"><div className="auth-card">
+      <div className="auth-title">Verify it's you</div>
+      <div className="auth-sub">Enter the 6-digit code from your authenticator app.</div>
+      {err&&<div className="err">{err}</div>}
+      <form onSubmit={verify}>
+        <div className="field">
+          <input inputMode="numeric" autoComplete="one-time-code" maxLength="6" value={code}
+            onChange={e=>setCode(e.target.value.replace(/\D/g,''))} placeholder="000000"
+            style={{textAlign:'center',fontSize:24,letterSpacing:'.3em'}}/>
+        </div>
+        <button className="btn btn-primary" disabled={busy||code.length<6}>{busy?'Checking…':'Verify'}</button>
+      </form>
+    </div></div>
+  );
+
+  return(
+    <div className="auth-wrap"><div className="auth-card">
+      <div className="auth-title">🍷 Palate</div>
+      <div className="auth-sub">
+        Log what you drink, answer a few plain-English questions, and let it work out what you
+        actually like. Same login as your budget app.
+      </div>
+      {err&&<div className="err">{err}</div>}
+      <form onSubmit={submit}>
+        <div className="field"><label>Email</label>
+          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" required/></div>
+        <div className="field"><label>Password</label>
+          <input type="password" value={pass} onChange={e=>setPass(e.target.value)} autoComplete="current-password" required/></div>
+        <button className="btn btn-primary" disabled={busy}>{busy?'…':mode==='login'?'Log in':'Create account'}</button>
+      </form>
+      <div style={{textAlign:'center',marginTop:18,fontSize:14,color:'var(--muted)'}}>
+        {mode==='login'?"No account? ":"Already have one? "}
+        <button onClick={()=>{setMode(mode==='login'?'signup':'login');setErr('');}}
+          style={{background:'none',border:'none',color:'var(--accent)',fontWeight:700,fontSize:14,cursor:'pointer'}}>
+          {mode==='login'?'Sign up':'Log in'}
+        </button>
+      </div>
+    </div></div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   THE TASTING FLOW — one question per screen,
+   tap an answer, it moves on by itself.
+══════════════════════════════════════════════ */
+function TastingFlow({uid,onDone,onCancel,toast,seed}){
+  const[depth,setDepth]=useState('full');
+  const[info,setInfo]=useState({
+    name:seed?.name||'',producer:seed?.producer||'',vintage:seed?.vintage||'',
+    wine_type:seed?.wine_type||'red',grape:seed?.grape||'',region:seed?.region||'',
+    price:'',where_had:'',tasted_on:today(),photo:null,note:'',
+  });
+  const[answers,setAnswers]=useState({});
+  const[verdict,setVerdict]=useState(null);
+  const[liked,setLiked]=useState([]);
+  const[bugged,setBugged]=useState([]);
+  const[step,setStep]=useState(0);
+  const[saving,setSaving]=useState(false);
+  const[saved,setSaved]=useState(null);
+  const topRef=useRef(null);
+
+  const qs=useMemo(()=>QUESTIONS.filter(q=>{
+    if(q.only&&!q.only.includes(info.wine_type))return false;
+    if(depth==='quick'&&!q.quick)return false;
+    return true;
+  }),[info.wine_type,depth]);
+  const steps=useMemo(()=>['info',...qs.map(q=>q.id),'verdict','reaction'],[qs]);
+  const cur=steps[Math.min(step,steps.length-1)];
+
+  useEffect(()=>{if(topRef.current)topRef.current.scrollTop=0;},[step]);
+
+  const set=(k,v)=>setInfo(i=>({...i,[k]:v}));
+  const next=()=>setStep(s=>Math.min(s+1,steps.length-1));
+  const back=()=>{if(step===0)onCancel();else setStep(s=>s-1);};
+
+  function pickOne(qid,v){
+    setAnswers(a=>({...a,[qid]:v}));
+    setTimeout(()=>setStep(s=>Math.min(s+1,steps.length-1)),170);
+  }
+  function toggleMany(qid,v,max){
+    setAnswers(a=>{
+      const arr=Array.isArray(a[qid])?[...a[qid]]:[];
+      const i=arr.indexOf(v);
+      if(i>=0)arr.splice(i,1);
+      else{arr.push(v);if(max&&arr.length>max)arr.shift();}
+      return{...a,[qid]:arr};
+    });
+  }
+  function toggleChip(list,setList,v){
+    setList(l=>l.includes(v)?l.filter(x=>x!==v):[...l,v]);
+  }
+
+  async function onPhoto(e){
+    const f=e.target.files&&e.target.files[0];
+    if(!f)return;
+    try{set('photo',await resizePhoto(f));}
+    catch(err){toast(err.message||'Photo failed','error');}
+  }
+
+  async function save(){
+    setSaving(true);
+    try{
+      const row={
+        user_id:uid,tasted_on:info.tasted_on,
+        name:(info.name||'').trim()||'Unnamed bottle',
+        producer:info.producer.trim()||null,vintage:info.vintage.trim()||null,
+        wine_type:info.wine_type,grape:info.grape.trim()||null,region:info.region.trim()||null,
+        price:info.price===''?null:Number(info.price),
+        where_had:info.where_had.trim()||null,photo:info.photo,
+        answers,verdict,liked,bugged,note:info.note.trim()||null,
+      };
+      const rec=await D.add(row);
+      setSaved(rec);
+    }catch(e){toast(e.message||'Could not save','error');}
+    setSaving(false);
+  }
+
+  /* ---------- after saving: teach the words ---------- */
+  if(saved){
+    const{a}=wineAttrs(saved);
+    const near=STYLES.map(s=>{
+      let n=0,d=0;
+      DIMS.forEach(dm=>{
+        if(a[dm.k]==null)return;
+        n+=dm.w*Math.pow(a[dm.k]-s.a[dm.k],2);d+=dm.w;
+      });
+      return{s,dist:d?Math.sqrt(n/d):99};
+    }).filter(x=>x.s.k===saved.wine_type).sort((x,y)=>x.dist-y.dist)[0];
+    return(
+      <div className="main-scroll" ref={topRef}>
+        <div className="qhead">
+          <div className="qstep">Logged</div>
+          <div className="qtitle">{saved.name}</div>
+        </div>
+        <div className="sheet">
+          <h3>In wine words</h3>
+          <div className="line">{translate(a,saved.wine_type)}</div>
+          <div className="tagline">Those are the terms a wine shop would use for exactly what you just drank. That's the vocabulary, learned backwards — from the glass, not a book.</div>
+        </div>
+        {near&&near.dist<2.4&&(
+          <div className="card">
+            <div className="section-title" style={{margin:'0 0 8px'}}>Closest style in the book</div>
+            <div className="rec-name">{near.s.n}</div>
+            <div className="rec-desc">{near.s.d}</div>
+            <div className="rec-ask">Next time, {near.s.ask}</div>
+          </div>
+        )}
+        <button className="btn btn-primary" onClick={()=>onDone(saved)}>Done</button>
+      </div>
+    );
+  }
+
+  const q=QUESTIONS.find(x=>x.id===cur);
+  const pct=Math.round((step/(steps.length-1))*100);
+
+  return(
+    <div className="main-scroll" ref={topRef}>
+      <div className="pbar"><div className="pfill" style={{width:pct+'%'}}/></div>
+
+      {cur==='info'&&(
+        <div>
+          <div className="qhead">
+            <div className="qstep">Step 1 — the bottle</div>
+            <div className="qtitle">What are you drinking?</div>
+            <div className="qhelp">Snap the label so you can find it again. Everything except the name is optional.</div>
+          </div>
+          <label className="photo-drop" style={{display:'block',marginBottom:14}}>
+            {info.photo
+              ? <img src={info.photo} alt="label"/>
+              : <span>📷 Tap to add a photo of the label</span>}
+            <input type="file" accept="image/*" onChange={onPhoto} style={{display:'none'}}/>
+          </label>
+          {info.photo&&<button className="btn btn-ghost btn-sm" style={{marginBottom:14}} onClick={()=>set('photo',null)}>Remove photo</button>}
+          <div className="field"><label>Name on the bottle</label>
+            <input value={info.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. Meiomi Pinot Noir"/></div>
+          <div className="field"><label>Type</label>
+            <div className="chipwrap">
+              {TYPES.map(t=>(
+                <button key={t.v} className={`chip${info.wine_type===t.v?' on':''}`} onClick={()=>set('wine_type',t.v)}>
+                  {t.em} {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid2">
+            <div className="field"><label>Vintage</label>
+              <input inputMode="numeric" value={info.vintage} onChange={e=>set('vintage',e.target.value)} placeholder="2022"/></div>
+            <div className="field"><label>Price paid</label>
+              <input inputMode="decimal" value={info.price} onChange={e=>set('price',e.target.value.replace(/[^0-9.]/g,''))} placeholder="18"/></div>
+          </div>
+          <div className="grid2">
+            <div className="field"><label>Grape (if you know)</label>
+              <input value={info.grape} onChange={e=>set('grape',e.target.value)} placeholder="Pinot Noir"/></div>
+            <div className="field"><label>Where</label>
+              <input value={info.where_had} onChange={e=>set('where_had',e.target.value)} placeholder="Home / restaurant"/></div>
+          </div>
+          <div className="field"><label>Date</label>
+            <input type="date" value={info.tasted_on} onChange={e=>set('tasted_on',e.target.value)}/></div>
+          <div className="field"><label>How many questions?</label>
+            <button className={`choice${depth==='full'?' on':''}`} onClick={()=>setDepth('full')}>
+              <div className="choice-main"><span className="em">🍷</span>Full tasting</div>
+              <div className="choice-sub">{QUESTIONS.filter(x=>!x.only||x.only.includes(info.wine_type)).length} quick taps. Best data — do this one when you're sitting down with the glass.</div>
+            </button>
+            <button className={`choice${depth==='quick'?' on':''}`} onClick={()=>setDepth('quick')}>
+              <div className="choice-main"><span className="em">⚡</span>Quick log</div>
+              <div className="choice-sub">Just the four that matter most. For when you're out and don't want to be that person.</div>
+            </button>
+          </div>
+          <div className="flowfoot">
+            <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+            <button className="btn btn-primary" onClick={next}>Start tasting</button>
+          </div>
+        </div>
+      )}
+
+      {q&&(
+        <div>
+          <div className="qhead">
+            <div className="qstep">Question {step} of {qs.length}</div>
+            <div className="qtitle">{q.title}</div>
+            <div className="qhelp">{q.help}</div>
+          </div>
+          {q.options.map(o=>{
+            const on=q.kind==='one'
+              ? answers[q.id]===o.v
+              : Array.isArray(answers[q.id])&&answers[q.id].includes(o.v);
+            return(
+              <button key={o.v} className={`choice${on?' on':''}`}
+                onClick={()=>q.kind==='one'?pickOne(q.id,o.v):toggleMany(q.id,o.v,q.max)}>
+                <div className="choice-main"><span className="em">{o.em}</span>{o.label}</div>
+                {o.sub&&<div className="choice-sub">{o.sub}</div>}
+              </button>
+            );
+          })}
+          <div className="flowfoot">
+            <button className="btn btn-ghost" onClick={back}>Back</button>
+            <button className="btn btn-secondary" onClick={next}>
+              {q.kind==='many'?'Next':'Skip'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {cur==='verdict'&&(
+        <div>
+          <div className="qhead">
+            <div className="qstep">Almost done</div>
+            <div className="qtitle">Bottom line — would you drink it again?</div>
+            <div className="qhelp">This is the one that teaches the app the most. Gut answer, no overthinking.</div>
+          </div>
+          {VERDICTS.map(v=>(
+            <button key={v.v} className={`choice${verdict===v.v?' on':''}`}
+              onClick={()=>{setVerdict(v.v);setTimeout(next,170);}}>
+              <div className="choice-main"><span className="em">{v.em}</span>{v.label}</div>
+            </button>
+          ))}
+          <div className="flowfoot"><button className="btn btn-ghost" onClick={back}>Back</button></div>
+        </div>
+      )}
+
+      {cur==='reaction'&&(
+        <div>
+          <div className="qhead">
+            <div className="qstep">Last one</div>
+            <div className="qtitle">What worked, and what didn't?</div>
+            <div className="qhelp">Tap anything that fits, or nothing at all. These are what pin down your profile — they tell the app which direction to move, not just where the wine sat.</div>
+          </div>
+          <div className="section-title" style={{marginTop:0}}>👍 What worked for you</div>
+          <div className="chipwrap">
+            {LIKED.map(c=>(
+              <button key={c.v} className={`chip${liked.includes(c.v)?' on':''}`}
+                onClick={()=>toggleChip(liked,setLiked,c.v)}>{c.label}</button>
+            ))}
+          </div>
+          <div className="section-title">👎 What bugged you</div>
+          <div className="chipwrap">
+            {BUGGED.map(c=>(
+              <button key={c.v} className={`chip bad${bugged.includes(c.v)?' on':''}`}
+                onClick={()=>toggleChip(bugged,setBugged,c.v)}>{c.label}</button>
+            ))}
+          </div>
+          <div className="field" style={{marginTop:18}}><label>Anything else worth remembering?</label>
+            <textarea value={info.note} onChange={e=>set('note',e.target.value)}
+              placeholder="Had it with steak. Second glass was better than the first."/></div>
+          <div className="flowfoot">
+            <button className="btn btn-ghost" onClick={back}>Back</button>
+            <button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'Saving…':'Save this wine'}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   JOURNAL
+══════════════════════════════════════════════ */
+function WineRow({t,onOpen}){
+  const v=VMAP[t.verdict];
+  const meta=[t.vintage,TYPELABEL(t.wine_type),t.price?'$'+Number(t.price).toFixed(0):null,dateLabel(t.tasted_on)]
+    .filter(Boolean).join(' · ');
+  return(
+    <button className="wrow" onClick={()=>onOpen(t)}>
+      <div className="wthumb">{t.photo?<img src={t.photo} alt=""/>:<span>🍷</span>}</div>
+      <div className="wmid">
+        <div className="wname">{t.name}</div>
+        <div className="wmeta">{meta}</div>
+        {v&&<div style={{marginTop:6}}><span className={`verdict ${v.cls}`}>{v.em} {v.v==='love'?'Loved it':v.v==='like'?'Liked it':v.v==='meh'?'It was fine':'Not for me'}</span></div>}
+      </div>
+    </button>
+  );
+}
+
+function WineDetail({t,onClose,onDelete,onAgain,toast,onVerdict}){
+  const{a}=wineAttrs(t);
+  const ans=[];
+  QUESTIONS.forEach(q=>{
+    const v=t.answers&&t.answers[q.id];
+    if(v==null)return;
+    if(q.kind==='one'){
+      const o=q.options.find(x=>x.v===v);
+      if(o)ans.push({q:q.title,a:o.label});
+    }else{
+      const arr=Array.isArray(v)?v:[];
+      const labels=q.options.filter(o=>arr.includes(o.v)).map(o=>o.label);
+      if(labels.length)ans.push({q:q.title,a:labels.join(', ')});
+    }
+  });
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-sheet" onClick={e=>e.stopPropagation()}>
+        <div className="modal-handle"/>
+        <div className="modal-title">{t.name}</div>
+        {t.photo&&<img src={t.photo} alt="" style={{width:'100%',maxHeight:260,objectFit:'contain',borderRadius:12,marginBottom:14,background:'var(--bg)'}}/>}
+        <div className="sheet" style={{marginBottom:14}}>
+          <h3>In wine words</h3>
+          <div className="line" style={{fontSize:15,marginBottom:0}}>{translate(a,t.wine_type)}</div>
+        </div>
+        <div className="card" style={{marginBottom:14}}>
+          {t.producer&&<div className="kv"><span>Producer</span><span>{t.producer}</span></div>}
+          <div className="kv"><span>Type</span><span>{TYPELABEL(t.wine_type)}</span></div>
+          {t.grape&&<div className="kv"><span>Grape</span><span>{t.grape}</span></div>}
+          {t.region&&<div className="kv"><span>Region</span><span>{t.region}</span></div>}
+          {t.vintage&&<div className="kv"><span>Vintage</span><span>{t.vintage}</span></div>}
+          {t.price!=null&&<div className="kv"><span>Price</span><span>${Number(t.price).toFixed(2)}</span></div>}
+          {t.where_had&&<div className="kv"><span>Where</span><span>{t.where_had}</span></div>}
+          <div className="kv"><span>Tasted</span><span>{dateLabel(t.tasted_on)}</span></div>
+        </div>
+        <div className="section-title" style={{marginTop:0}}>Your verdict</div>
+        {VERDICTS.map(v=>(
+          <button key={v.v} className={`choice${t.verdict===v.v?' on':''}`} onClick={()=>onVerdict(t,v.v)}>
+            <div className="choice-main"><span className="em">{v.em}</span>{v.label}</div>
+          </button>
+        ))}
+        {!!(t.liked||[]).length&&<>
+          <div className="section-title">👍 What worked</div>
+          <div className="chipwrap">{(t.liked||[]).map(c=>CHIPMAP[c]&&<span key={c} className="chip on">{CHIPMAP[c].label}</span>)}</div>
+        </>}
+        {!!(t.bugged||[]).length&&<>
+          <div className="section-title">👎 What bugged you</div>
+          <div className="chipwrap">{(t.bugged||[]).map(c=>CHIPMAP[c]&&<span key={c} className="chip bad on">{CHIPMAP[c].label}</span>)}</div>
+        </>}
+        {!!ans.length&&<>
+          <div className="section-title">Your answers</div>
+          <div className="card">
+            {ans.map((x,i)=>(
+              <div key={i} style={{padding:'9px 0',borderBottom:i<ans.length-1?'1px solid var(--border)':'none'}}>
+                <div style={{fontSize:12,color:'var(--muted)'}}>{x.q}</div>
+                <div style={{fontSize:14,fontWeight:600,marginTop:3}}>{x.a}</div>
+              </div>
+            ))}
+          </div>
+        </>}
+        {t.note&&<><div className="section-title">Note</div><div className="card" style={{fontSize:14,lineHeight:1.55}}>{t.note}</div></>}
+        <button className="btn btn-secondary" style={{marginTop:14}} onClick={()=>onAgain(t)}>🍷 Log this wine again</button>
+        <button className="btn btn-danger" style={{marginTop:9}} onClick={()=>onDelete(t)}>Delete</button>
+        <button className="btn btn-ghost" style={{marginTop:9}} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+function JournalTab({tastings,onOpen,onNew}){
+  const[filter,setFilter]=useState('all');
+  const list=filter==='all'?tastings:tastings.filter(t=>t.wine_type===filter);
+  const loved=tastings.filter(t=>t.verdict==='love').length;
+  const spend=tastings.reduce((s,t)=>s+(Number(t.price)||0),0);
+  if(!tastings.length)return(
+    <div className="main-scroll">
+      <div className="empty">
+        <div className="big">🍷</div>
+        <h3>Nothing logged yet</h3>
+        <p>
+          Pour a glass, hit the button, and answer a handful of multiple-choice questions.
+          Nothing to know up front — every option is described in plain language.
+          <br/><br/>
+          Three wines in, this starts telling you what you like. Six in, it gets specific
+          enough to hand a wine shop.
+        </p>
+        <button className="btn btn-primary" style={{marginTop:22,maxWidth:280,marginLeft:'auto',marginRight:'auto'}} onClick={onNew}>
+          Log your first wine
+        </button>
+      </div>
+    </div>
+  );
+  return(
+    <div className="main-scroll">
+      <div className="card" style={{display:'flex',justifyContent:'space-around',textAlign:'center'}}>
+        <div><div style={{fontSize:22,fontWeight:800}}>{tastings.length}</div><div style={{fontSize:11,color:'var(--muted)',fontWeight:600}}>LOGGED</div></div>
+        <div><div style={{fontSize:22,fontWeight:800,color:'var(--accent)'}}>{loved}</div><div style={{fontSize:11,color:'var(--muted)',fontWeight:600}}>LOVED</div></div>
+        <div><div style={{fontSize:22,fontWeight:800}}>${spend.toFixed(0)}</div><div style={{fontSize:11,color:'var(--muted)',fontWeight:600}}>SPENT</div></div>
+      </div>
+      <div className="pills">
+        <button className={`pill${filter==='all'?' active':''}`} onClick={()=>setFilter('all')}>All</button>
+        {TYPES.filter(ty=>tastings.some(t=>t.wine_type===ty.v)).map(ty=>(
+          <button key={ty.v} className={`pill${filter===ty.v?' active':''}`} onClick={()=>setFilter(ty.v)}>{ty.em} {ty.label}</button>
+        ))}
+      </div>
+      {list.map(t=><WineRow key={t.id} t={t} onOpen={onOpen}/>)}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   MY PALATE
+══════════════════════════════════════════════ */
+function dimNote(k,v){
+  const N={
+    sweet:[[2,'You want it bone dry.'],[3.6,'Dry, with no sugar to speak of.'],[6,'You lean slightly sweet — "off-dry" is your word.'],[11,'You like actual sweetness. That’s a preference, not a crime.']],
+    acid:[[4.6,'You like soft, round wines over tart ones.'],[6.8,'Middle of the road on tartness.'],[11,'You want bright, mouth-watering wines. Say "high acid" or "crisp."']],
+    tannin:[[3.5,'Low grip. Smooth reds only — this is the single most useful thing to know about you.'],[6.2,'You can handle moderate grip.'],[11,'You actually like the grip. Big structured reds are fair game.']],
+    body:[[4,'Light-bodied. Heavy wines wear you out.'],[6.4,'Medium-bodied.'],[11,'Full-bodied. You want something with weight.']],
+    oak:[[3,'No oak. Look for "unoaked" and "stainless steel."'],[6,'A little oak is fine.'],[11,'You like oak — vanilla, toast, baking spice.']],
+    fruit:[[4.5,'You prefer tart, fresh fruit over ripe.'],[6.8,'Ripe but not jammy.'],[11,'You go for jammy, sweet-fruited wines.']],
+    booze:[[4,'You prefer lower-alcohol wines. Check the label — under 13%.'],[6.5,'Moderate alcohol.'],[11,'Higher-alcohol, warming wines don’t bother you.']],
+    funk:[[4,'Clean and fruity. Old World funk isn’t for you.'],[6.5,'A little earthiness is welcome.'],[11,'You like earthy, savory, funky wines. That’s an unusual palate — in a good way.']],
+    bub:[[3,'Still wine is your default.'],[6,'Bubbles sometimes.'],[11,'You like sparkling.']],
+  };
+  const r=(N[k]||[]).find(x=>v<x[0]);
+  return r?r[1]:'';
+}
+function confWord(c){return c>.75?'locked in':c>.45?'getting clear':'still fuzzy';}
+
+function DimMeter({d,p}){
+  if(!p||p.target==null||p.conf<.18)return(
+    <div className="dim">
+      <div className="dim-top"><span className="dim-name">{d.name}</span>
+        <span className="dim-val" style={{color:'var(--muted)'}}>no data yet</span></div>
+      <div className="dim-track"/>
+      <div className="dim-ends"><span>{d.lo}</span><span>{d.hi}</span></div>
+    </div>
+  );
+  const lo=clamp(p.target-p.spread,0,10),hi=clamp(p.target+p.spread,0,10);
+  return(
+    <div className="dim">
+      <div className="dim-top">
+        <span className="dim-name">{d.name}</span>
+        <span className="dim-val">{p.target.toFixed(1)}/10 · {confWord(p.conf)}</span>
+      </div>
+      <div className="dim-track">
+        <div className="dim-range" style={{left:lo*10+'%',width:(hi-lo)*10+'%'}}/>
+        <div className="dim-mark" style={{left:`calc(${p.target*10}% - 2px)`}}/>
+      </div>
+      <div className="dim-ends"><span>{d.lo}</span><span>{d.hi}</span></div>
+      <div className="dim-note">{dimNote(d.k,p.target)}{p.bounded?' (adjusted by what you said worked and didn’t)':''}</div>
+    </div>
+  );
+}
+
+function PalateTab({tastings,prof,onNew,toast}){
+  const desc=useMemo(()=>describe(prof,tastings),[tastings,prof]);
+  const insights=useMemo(()=>buildInsights(tastings,prof),[tastings,prof]);
+  const[how,setHow]=useState(false);
+  if(!tastings.length)return(
+    <div className="main-scroll"><div className="empty">
+      <div className="big">🎯</div><h3>Nothing to read yet</h3>
+      <p>Log a wine or two and your profile builds itself from your answers.</p>
+      <button className="btn btn-primary" style={{marginTop:20,maxWidth:260,marginLeft:'auto',marginRight:'auto'}} onClick={onNew}>Log a wine</button>
+    </div></div>
+  );
+  const need=Math.max(0,3-tastings.length),needPos=Math.max(0,2-prof.positive);
+  return(
+    <div className="main-scroll">
+      {!prof.ready&&(
+        <div className="conf">
+          <b>Still warming up.</b> {need>0?`Log ${need} more wine${need>1?'s':''}`:'Rate a couple more'}
+          {needPos>0?` — and mark at least ${needPos} more as "liked" or "loved," since what you like is what the profile is built from.`:'.'}
+          {' '}Everything below is real, just thin.
+        </div>
+      )}
+      <div className="sheet">
+        <h3>Your palate, in one line</h3>
+        <div className="line">You like {desc.headline}.</div>
+        <div className="say">{desc.say}</div>
+        <button className="btn btn-secondary btn-sm" style={{marginTop:12,width:'100%'}}
+          onClick={()=>{
+            if(navigator.clipboard){navigator.clipboard.writeText(desc.say).then(()=>toast('Copied — paste it anywhere'),()=>toast('Copy failed','error'));}
+            else toast('Copy not supported here','error');
+          }}>📋 Copy that to show someone</button>
+      </div>
+
+      {!!insights.length&&<>
+        <div className="section-title">What the data says about you</div>
+        {insights.map((i,n)=><div className="insight" key={n}><span className="ic">{i.ic}</span><span>{i.text}</span></div>)}
+      </>}
+
+      <div className="section-title">Where you land on every scale</div>
+      <div className="card">
+        {DIMS.map(d=><DimMeter key={d.k} d={d} p={prof.dims[d.k]}/>)}
+      </div>
+
+      <button className="btn btn-ghost" onClick={()=>setHow(!how)}>{how?'Hide':'How is this calculated?'}</button>
+      {how&&(
+        <div className="card" style={{marginTop:10,fontSize:13.5,lineHeight:1.6,color:'var(--muted)'}}>
+          <p>Every answer you tap carries a number. "It dried my mouth out like strong tea" means grip = 8.5.
+          "My mouth watered a lot" means tartness = 8.5. You never see the numbers while tasting — you just
+          describe what happened.</p>
+          <p style={{marginTop:10}}>Your profile is the weighted average of the wines you <i>liked</i>, not all of them.
+          A "loved it" counts about twice as much as a "liked it," and a "not for me" doesn't pull the average at all —
+          it only shows up in the patterns above.</p>
+          <p style={{marginTop:10}}>The "what worked / what bugged you" taps do something different. They're tied to the
+          specific wine you said them about, so "too much oak" on a wine measuring 8/10 oak sets a ceiling —
+          your profile can't sit above 6.5 there no matter what else you drink. That's how a preference gets
+          learned from one clear reaction instead of twenty bottles.</p>
+          <p style={{marginTop:10}}>The shaded band is your range — how consistent you've been. A wide band means you're
+          flexible on that scale; a narrow one means you're picky about it.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   WHAT TO BUY
+══════════════════════════════════════════════ */
+function ShopTab({tastings,prof,onNew,toast}){
+  const[kind,setKind]=useState('all');
+  const desc=useMemo(()=>describe(prof,tastings),[tastings,prof]);
+  const{best,worst}=useMemo(()=>recommend(prof,kind),[prof,kind]);
+  const tried=new Set(tastings.map(t=>(t.grape||'').toLowerCase().trim()).filter(Boolean));
+  const triedKinds=new Set(tastings.map(t=>t.wine_type));
+  if(!best.length)return(
+    <div className="main-scroll"><div className="empty">
+      <div className="big">🛒</div><h3>Log a wine first</h3>
+      <p>Once there's something to go on, this becomes a shopping list built around your answers — with the exact words to say at the counter.</p>
+      <button className="btn btn-primary" style={{marginTop:20,maxWidth:260,marginLeft:'auto',marginRight:'auto'}} onClick={onNew}>Log a wine</button>
+    </div></div>
+  );
+  return(
+    <div className="main-scroll">
+      <div className="sheet">
+        <h3>Show this at the wine shop</h3>
+        <div className="say">{desc.say}</div>
+      </div>
+      {!prof.ready&&<div className="conf">These are honest guesses off {tastings.length} wine{tastings.length>1?'s':''}. They'll sharpen fast.</div>}
+      <div className="pills">
+        <button className={`pill${kind==='all'?' active':''}`} onClick={()=>setKind('all')}>All</button>
+        {TYPES.map(t=><button key={t.v} className={`pill${kind===t.v?' active':''}`} onClick={()=>setKind(t.v)}>{t.em} {t.label}</button>)}
+      </div>
+      <div className="section-title" style={{marginTop:4}}>Try these next</div>
+      {best.map(x=>(
+        <div className="rec" key={x.s.n}>
+          <div className="rec-top">
+            <div>
+              <div className="rec-name">{x.s.n}</div>
+              <div className="rec-kind">{TYPELABEL(x.s.k)} · {x.s.px}</div>
+            </div>
+            <div className="rec-score">{x.match}% match</div>
+          </div>
+          <div className="rec-desc">{x.s.d}</div>
+          {x.why&&<div className="rec-desc" style={{color:x.bad&&x.bad.length?'var(--amber)':'var(--green)'}}>{x.why}</div>}
+          <div className="rec-ask">🗣 {x.s.ask}</div>
+          {tried.has(x.s.n.toLowerCase())&&<div className="rec-desc">You've logged this one before.</div>}
+          {!triedKinds.has(x.s.k)&&<div className="rec-desc" style={{color:'var(--blue)'}}>
+            New territory — you haven't logged {TYPEPLURAL(x.s.k)} yet, but it fits your profile on the scales you have given data on.</div>}
+        </div>
+      ))}
+      {!!worst.length&&<div className="section-title">Probably not your thing</div>}
+      {worst.map(x=>(
+        <div className="rec" key={x.s.n} style={{opacity:.72}}>
+          <div className="rec-top">
+            <div><div className="rec-name">{x.s.n}</div><div className="rec-kind">{TYPELABEL(x.s.k)} · {x.s.px}</div></div>
+            <div className="rec-score" style={{color:'var(--muted)'}}>{x.match}%</div>
+          </div>
+          <div className="rec-desc">{x.why||x.s.d}</div>
+        </div>
+      ))}
+      <div className="conf" style={{marginTop:14}}>
+        Matching is a weighted distance between your profile and each style, and scales you haven't
+        given much data on count for less. A low score isn't a warning — it's just "further from your
+        usual." Drinking one on purpose is the fastest way to find your edges.
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   LEARN — the words, defined by feel
+══════════════════════════════════════════════ */
+const GLOSSARY=[
+  {t:'Dry',p:'No sugar left. Has nothing to do with how fruity it smells.',s:'A wine can smell like blackberry jam and still be bone dry. Judge sweetness only by taste, on the tip of your tongue.'},
+  {t:'Tannin',p:'The drying, fuzzy grip in reds. Comes from grape skins and seeds.',s:'Swallow, then rub your tongue on the roof of your mouth. If it catches instead of gliding, that’s tannin. Over-steeped black tea is the same sensation.'},
+  {t:'Acidity',p:'The tartness that makes your mouth water.',s:'Watch the sides of your tongue and under it. High acid feels like biting a green apple; low acid feels flat and heavy.'},
+  {t:'Body',p:'How heavy the wine feels, independent of flavor.',s:'Water, skim milk, whole milk, cream. Pick the closest. Alcohol percentage is a decent shortcut — higher usually means fuller.'},
+  {t:'Oak',p:'Vanilla, coconut, toast, baking spice — all from the barrel, not the grape.',s:'If a dry wine smells sweet and creamy, that’s oak. "Unoaked" or "stainless steel" on the label means none of it.'},
+  {t:'Finish',p:'How long the flavor lasts after you swallow.',s:'Count the seconds. Long isn’t automatically better — but a finish that turns bitter or hot is a real complaint.'},
+  {t:'Off-dry',p:'A little sweet, but not dessert sweet.',s:'The single most useful term for people who find most wine too harsh. Ask for it by name.'},
+  {t:'Old World vs New World',p:'Europe vs. everywhere else — a shorthand for style.',s:'Old World (France, Italy, Spain, Germany) leans tart, earthy, restrained. New World (US, Chile, Argentina, Australia) leans ripe, fruity, oakier.'},
+  {t:'Brut / Secco / Trocken',p:'Dry, in French, Italian and German.',s:'On sparkling wine, Brut is dry and Extra Dry is actually sweeter than Brut. Yes, really.'},
+  {t:'Legs',p:'The streaks running down the glass after a swirl.',s:'They tell you about alcohol and sugar, and nothing at all about quality. Safe to ignore.'},
+  {t:'Reserve / Reserva',p:'Usually longer aging, often more oak.',s:'Legally meaningful in Spain and Italy, essentially marketing in the US.'},
+  {t:'Decanting',p:'Pouring it into another container to let air in.',s:'Helps tight, grippy young reds. Does nothing for a light white. Fifteen minutes in a big glass, swirled, gets you most of the way.'},
+];
+function LearnTab(){
+  const[open,setOpen]=useState(null);
+  return(
+    <div className="main-scroll">
+      <div className="sheet">
+        <h3>Tasting, in 30 seconds</h3>
+        <div className="line" style={{fontSize:14.5,fontWeight:500,lineHeight:1.65}}>
+          1. Swirl it once, then sniff twice — short sniffs beat one long one.<br/>
+          2. Take a real sip, not a polite one, and let it sit a second.<br/>
+          3. Swallow, then pay attention to what your mouth does <i>after</i>: does it water? does it feel
+          dry and fuzzy? is there warmth in your chest?<br/>
+          4. That aftermath is most of what the questions are asking about — and it's the part almost
+          nobody slows down for.
+        </div>
+      </div>
+      <div className="section-title">The words, defined by feel</div>
+      {GLOSSARY.map(g=>(
+        <div className="rec" key={g.t} onClick={()=>setOpen(open===g.t?null:g.t)} style={{cursor:'pointer'}}>
+          <div className="rec-top">
+            <div className="rec-name">{g.t}</div>
+            <div className="rec-score" style={{color:'var(--muted)'}}>{open===g.t?'−':'+'}</div>
+          </div>
+          <div className="rec-desc">{g.p}</div>
+          {open===g.t&&<div className="rec-ask" style={{marginTop:9}}>{g.s}</div>}
+        </div>
+      ))}
+      <div className="conf" style={{marginTop:14}}>
+        You don't need any of this to use the app — every question is written to be answerable with no
+        vocabulary at all. This page is here for after the fact, when you want the name for the thing
+        you already noticed.
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════
+   APP
+══════════════════════════════════════════════ */
+function App(){
+  const[session,setSession]=useState(undefined);
+  const[tastings,setTastings]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[tab,setTab]=useState('journal');
+  const[flow,setFlow]=useState(null);
+  const[detail,setDetail]=useState(null);
+  const[dberr,setDberr]=useState(null);
+  const{toast,ToastContainer}=useToast();
+
+  useEffect(()=>{
+    db.auth.getSession().then(({data})=>setSession(data.session||null));
+    const{data:sub}=db.auth.onAuthStateChange((_e,s)=>setSession(s));
+    return()=>sub.subscription.unsubscribe();
+  },[]);
+
+  const uid=session?.user?.id;
+  const load=useCallback(async()=>{
+    if(!uid)return;
+    setLoading(true);
+    try{setTastings(await D.list(uid));setDberr(null);}
+    catch(e){setDberr(e.message||String(e));}
+    setLoading(false);
+  },[uid]);
+  useEffect(()=>{if(uid)load();},[uid,load]);
+
+  const prof=useMemo(()=>buildProfile(tastings),[tastings]);
+
+  async function setVerdict(t,v){
+    try{
+      await D.update(t.id,{verdict:v});
+      setTastings(list=>list.map(x=>x.id===t.id?{...x,verdict:v}:x));
+      setDetail(d=>d&&d.id===t.id?{...d,verdict:v}:d);
+      toast('Updated');
+    }catch(e){toast(e.message||'Could not update','error');}
+  }
+  async function del(t){
+    if(!window.confirm(`Delete "${t.name}"? This can't be undone.`))return;
+    try{
+      await D.del(t.id);
+      setTastings(l=>l.filter(x=>x.id!==t.id));
+      setDetail(null);toast('Deleted');
+    }catch(e){toast(e.message||'Could not delete','error');}
+  }
+
+  if(session===undefined)return<div className="app-wrap"><div className="empty" style={{marginTop:80}}>Loading…</div></div>;
+  if(!session)return<div className="app-wrap"><AuthScreen/></div>;
+
+  if(flow)return(
+    <div className="app-wrap">
+      <ToastContainer/>
+      <TastingFlow uid={uid} toast={toast} seed={flow.seed}
+        onCancel={()=>setFlow(null)}
+        onDone={rec=>{setFlow(null);setTastings(l=>[rec,...l]);setTab('journal');toast('Wine logged');}}/>
+    </div>
+  );
+
+  const NAV=[
+    {v:'journal',ic:'📖',label:'Journal'},
+    {v:'palate', ic:'🎯',label:'My Palate'},
+    {v:'shop',   ic:'🛒',label:'What to Buy'},
+    {v:'learn',  ic:'📚',label:'Learn'},
+  ];
+
+  return(
+    <div className="app-wrap">
+      <ToastContainer/>
+      <div className="topbar">
+        <h1>🍷 Pa<span>late</span></h1>
+        <button className="btn btn-ghost btn-sm" onClick={()=>db.auth.signOut()}>Sign out</button>
+      </div>
+      {dberr&&(
+        <div style={{padding:'12px 16px 0'}}>
+          <div className="err">
+            Couldn't reach the wine table: {dberr}
+            <div style={{marginTop:6,color:'var(--muted)'}}>If this says the table is missing, the database migration hasn't been applied yet.</div>
+          </div>
+        </div>
+      )}
+      {loading&&!tastings.length
+        ? <div className="main-scroll"><div className="empty">Loading your wines…</div></div>
+        : <>
+            {tab==='journal'&&<JournalTab tastings={tastings} onOpen={setDetail} onNew={()=>setFlow({})}/>}
+            {tab==='palate'&&<PalateTab tastings={tastings} prof={prof} onNew={()=>setFlow({})} toast={toast}/>}
+            {tab==='shop'&&<ShopTab tastings={tastings} prof={prof} onNew={()=>setFlow({})} toast={toast}/>}
+            {tab==='learn'&&<LearnTab/>}
+          </>}
+      {tab!=='learn'&&<button className="fab" onClick={()=>setFlow({})}>＋ Log a wine</button>}
+      <div className="bnav">
+        {NAV.map(n=>(
+          <button key={n.v} className={`bnav-item${tab===n.v?' active':''}`} onClick={()=>setTab(n.v)}>
+            <span className="ic">{n.ic}</span>{n.label}
+          </button>
+        ))}
+      </div>
+      {detail&&<WineDetail t={detail} onClose={()=>setDetail(null)} onDelete={del} toast={toast}
+        onVerdict={setVerdict}
+        onAgain={t=>{setDetail(null);setFlow({seed:{name:t.name,producer:t.producer,vintage:t.vintage,wine_type:t.wine_type,grape:t.grape,region:t.region}});}}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

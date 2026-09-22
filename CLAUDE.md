@@ -20,7 +20,8 @@ A personal budget dashboard for one user (Josh James, jotaja2@aol.com). Mobile-f
 ## Files
 ```
 budget-app/
-├── index.html        ← ENTIRE APP. All React components, CSS, JS in one file (~2000+ lines)
+├── index.html        ← ENTIRE BUDGET APP. All React components, CSS, JS in one file (~2000+ lines)
+├── wine.html         ← Palate — wine tasting journal. Separate single-file app, same pattern & Supabase project
 ├── netlify.toml      ← Legacy Netlify config (app now on GitHub Pages, ignore)
 ├── .netlify/         ← Legacy Netlify state (ignore)
 └── CLAUDE.md         ← This file
@@ -54,6 +55,7 @@ budget-app/
 | `quick_log_items` | id, label, category, default_amount, account, user_id | Quick-log presets |
 | `settings` | id (=key), key, value, user_id | Pay frequency, per-check amount. PK is `id text` — use delete+insert |
 | `plaid_items` | id, user_id, access_token, item_id, institution_name, cursor, last_synced_at | Plaid bank connections |
+| `wine_tastings` | id, user_id, tasted_on, name, producer, vintage, wine_type, grape, region, price, where_had, photo, answers (jsonb), verdict, liked (jsonb), bugged (jsonb), note | Wine journal (`wine.html`). `photo` is a resized base64 JPEG, not Storage. Single `wt_own` policy: `user_id = auth.uid()` |
 
 ### CRITICAL: Settings/budget_targets upsert pattern
 ```js
@@ -197,6 +199,38 @@ Car, Debt Payoff, Eating Out, Entertainment, Gas, Groceries, Healthcare, Home, H
 - **JCP Card** ($173) in debts but not connected via Plaid (Synchrony Bank, hit-or-miss)
 - **Income from Plaid** is filtered out — paycheck deposits don't auto-create income_events (auto-logger handles this via settings)
 - **`icon` field** on categories — old data has `icon`, new data uses `emoji`. Code handles both: `c.emoji||c.icon`
+
+---
+
+## Wine Journal (`wine.html`)
+
+Second single-file app at `https://jotaja2-spec.github.io/budget-app/wine.html`, linked from budget
+Settings. Same Supabase project and login (session is shared — same origin), same no-build pattern.
+Purpose: Josh can't articulate what wine he likes, so the app asks plain-English multiple-choice
+questions and derives the vocabulary for him.
+
+**How it works — everything runs on 9 scales, 0-10:** sweet, acid, tannin, body, oak, fruit, booze,
+funk, bub.
+1. Each answer option carries a `set` of scale values ("dried my mouth out like strong tea" → `tannin: 8.5`).
+   Questions never use wine jargon; `wineAttrs()` converts answers → the wine's 9 numbers.
+2. `buildProfile()` = weighted average over wines he **liked** (love 2.2, like 1.2, meh 0.35, no 0).
+   Disliked wines never move the average — they only appear in the insights.
+3. The "what worked / what bugged you" chips become **bounds anchored to that specific wine**:
+   a LIKED chip endorses roughly that level (floor `v-1` / cap `v+1`), a BUGGED chip rejects it
+   (floor `v+2` / cap `v-2`). That's how one clear reaction teaches a preference.
+4. Dims inferred only from wine colour (whites have no tannin, still wine has no bubbles) are marked
+   `soft` — 0.45 weight, and confidence is cut 65% if a dim has *only* soft data, so never-tried
+   categories aren't wrongly ruled out.
+5. `scoreStyle()` matches the profile against `STYLES` (~40 grapes/styles with the same 9 numbers) by
+   confidence-weighted distance. Deviation inside the spread band is free; overshooting a preference
+   already at the end of a scale is discounted 65%.
+
+**Tabs:** Journal · My Palate (cheat sheet + meters + insights) · What to Buy (matches + what to say
+out loud in a store) · Learn (glossary defined by physical sensation).
+
+**If you change the question set:** option `set` values are the contract — the profile, the style
+catalog and `translate()` all read the same 0-10 scales. Adding a question means adding a dimension
+to `DIMS` *and* a value for it on every entry in `STYLES`.
 
 ---
 
